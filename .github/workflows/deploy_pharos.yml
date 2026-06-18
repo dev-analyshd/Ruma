@@ -1,0 +1,49 @@
+name: Deploy to Pharos Testnet
+
+on:
+  workflow_dispatch:
+    inputs:
+      network:
+        description: "Target network"
+        required: true
+        default: "pharos_testnet"
+        type: choice
+        options:
+          - pharos_testnet
+          - pharos_mainnet
+
+jobs:
+  deploy:
+    name: Deploy SOVEREIGN-Ω Contracts
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.network }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Hardhat
+        run: npm install
+        working-directory: pharos/contracts/deploy
+
+      - name: Compile contracts
+        run: npx hardhat compile
+        working-directory: pharos/contracts/deploy
+
+      - name: Deploy contracts
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          AGENT_OPERATOR_ADDRESS: ${{ secrets.AGENT_OPERATOR_ADDRESS }}
+        run: |
+          npx hardhat run deploy.js --network ${{ github.event.inputs.network }}
+        working-directory: pharos/contracts/deploy
+
+      - name: Upload deployment artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-${{ github.event.inputs.network }}
+          path: pharos/deployments/
+          retention-days: 90

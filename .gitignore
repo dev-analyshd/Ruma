@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+*.env
+
+# FAISS / data
+*.faiss
+*.index
+faiss_store/
+data/
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agent / Replit internal
+attached_assets/
+.agents/
+.local/
+
+# IDE
+.idea/
+.vscode/
+*.swp

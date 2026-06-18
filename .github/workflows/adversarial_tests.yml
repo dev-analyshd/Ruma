@@ -1,0 +1,242 @@
+name: SOVEREIGN-Ω Adversarial Test Suite
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  adversarial-tests:
+    name: Adversarial Tests — Rules 1-13
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Install core dependencies
+        run: |
+          pip install numpy faiss-cpu 2>/dev/null || pip install numpy
+          pip install pandas statistics 2>/dev/null || true
+
+      - name: Create data directory
+        run: mkdir -p data
+
+      - name: Run — Rule 2: Moat Never Decreases
+        working-directory: .
+        run: python3 tests/adversarial/test_moat_attacks.py
+
+      - name: Run — Rule 3: Gate Override Attempts
+        working-directory: .
+        run: python3 tests/adversarial/test_gate_override_attempts.py
+
+      - name: Run — Rule 4: Silence Protocol
+        working-directory: .
+        run: python3 tests/adversarial/test_silence_logging.py
+
+      - name: Run — Rule 10: Inferential Contradiction Hard Zero
+        working-directory: .
+        run: python3 tests/adversarial/test_inferential_attacks.py
+
+      - name: Run — Rule 11: World Model Z-Score Hard Zero
+        working-directory: .
+        run: python3 tests/adversarial/test_world_model_attacks.py
+
+      - name: Run — Perceptual Entropy Floor
+        working-directory: .
+        run: python3 tests/adversarial/test_perceptual_attacks.py
+
+      - name: Run — Rule 1: FAISS Persistence Every Write
+        working-directory: .
+        run: python3 tests/adversarial/test_faiss_persistence.py
+
+      - name: Run — Rules 7 & 8: Risk Hard Limits
+        working-directory: .
+        run: python3 tests/adversarial/test_risk_limits.py
+
+      - name: Run — Dual Strand K+/K- Encoding
+        working-directory: .
+        run: python3 tests/adversarial/test_dual_strand.py
+
+  contract-compilation:
+    name: Solidity Compilation — Pharos Contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: pharos/contracts/deploy/package-lock.json
+
+      - name: Install Hardhat
+        run: npm install
+        working-directory: pharos/contracts/deploy
+
+      - name: Compile contracts
+        run: npx hardhat compile
+        working-directory: pharos/contracts/deploy
+
+      - name: Verify 3 contracts compiled
+        run: |
+          ls artifacts/contracts/SovereignRegistry.sol/SovereignRegistry.json
+          ls artifacts/contracts/SovereignVault.sol/SovereignVault.json
+          ls artifacts/contracts/SovereignLearner.sol/SovereignLearner.json
+          echo "All 3 contracts compiled successfully"
+        working-directory: pharos/contracts/deploy
+
+  core-invariants:
+    name: Core Mathematical Invariants
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install numpy 2>/dev/null || true
+
+      - name: Create data dir
+        run: mkdir -p data
+
+      - name: Assert plane weights sum to 1.0
+        run: |
+          python3 -c "
+          import sys
+          sys.path.insert(0, '.')
+          from core.coherence_engine import CoherenceEngine
+          e = CoherenceEngine()
+          total = e.W_P + e.W_I + e.W_C + e.W_S + e.W_W
+          assert abs(total - 1.0) < 1e-9, f'Weights sum to {total}'
+          print(f'PASS: weights sum to exactly {total}')
+          "
+
+      - name: Assert Delta_base = 0.65
+        run: |
+          python3 -c "
+          import sys
+          sys.path.insert(0, '.')
+          from core.action_gate import ActionGate
+          g = ActionGate()
+          assert g.DELTA_BASE == 0.65
+          assert g.MAX_DELTA == 0.897
+          print(f'PASS: DELTA_BASE={g.DELTA_BASE}, MAX_DELTA={g.MAX_DELTA}')
+          "
+
+      - name: Assert Lambda_0 = 0.01
+        run: |
+          python3 -c "
+          import sys
+          sys.path.insert(0, '.')
+          import os; os.makedirs('data', exist_ok=True)
+          from core.moat_accumulator import MoatAccumulator
+          assert MoatAccumulator.LAMBDA_0 == 0.01
+          print(f'PASS: LAMBDA_0={MoatAccumulator.LAMBDA_0}')
+          "
+
+      - name: Assert social gate threshold = 0.70
+        run: |
+          python3 -c "
+          import sys
+          sys.path.insert(0, '.')
+          import os; os.makedirs('data', exist_ok=True)
+          from social.social_gate import SocialGate
+          g = SocialGate()
+          assert g.DELTA_SOCIAL == 0.70
+          print(f'PASS: DELTA_SOCIAL={g.DELTA_SOCIAL}')
+          "
+
+      - name: Assert max position 2% of vault
+        run: |
+          python3 -c "
+          import sys
+          sys.path.insert(0, '.')
+          from trading.risk_manager import RiskManager
+          r = RiskManager()
+          assert r.MAX_POSITION_PCT == 0.02
+          assert r.MAX_DAILY_LOSS_PCT == 0.06
+          print(f'PASS: MAX_POSITION={r.MAX_POSITION_PCT}, MAX_DAILY_LOSS={r.MAX_DAILY_LOSS_PCT}')
+          "
+
+      - name: Assert contradiction threshold = -0.30
+        run: |
+          python3 -c "
+          import sys
+          sys.path.insert(0, '.')
+          from planes.inferential import InferentialPlane
+          p = InferentialPlane()
+          assert p.CONTRADICTION_THRESHOLD == -0.3
+          print(f'PASS: CONTRADICTION_THRESHOLD={p.CONTRADICTION_THRESHOLD}')
+          "
+
+      - name: Assert world model z-score limit = 3.0
+        run: |
+          python3 -c "
+          import sys
+          sys.path.insert(0, '.')
+          from planes.world_model import WorldModelPlane
+          w = WorldModelPlane()
+          assert w.Z_SCORE_LIMIT == 3.0
+          print(f'PASS: Z_SCORE_LIMIT={w.Z_SCORE_LIMIT}')
+          "
+
+  no-hardcoded-keys:
+    name: Security — No Hardcoded Private Keys
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for hardcoded private keys
+        run: |
+          echo "Scanning for private key patterns..."
+          FOUND=0
+
+          # Check for hex private keys (64 hex chars)
+          if grep -rn --include="*.py" --include="*.js" --include="*.ts" \
+            -E '"0x[0-9a-fA-F]{64}"' . \
+            --exclude-dir=".git" --exclude-dir="node_modules" --exclude-dir="tests"; then
+            echo "FAIL: Hardcoded hex private key found!"
+            FOUND=1
+          fi
+
+          # Check for common key patterns
+          if grep -rn --include="*.py" --include="*.js" \
+            -E "private_key\s*=\s*['\"][0-9a-fA-F]{64}['\"]" . \
+            --exclude-dir=".git" --exclude-dir="node_modules"; then
+            echo "FAIL: Hardcoded private_key assignment found!"
+            FOUND=1
+          fi
+
+          # Ensure keys are loaded from env
+          CHAIN_CLIENT="pharos/chain_client.py"
+          if ! grep -q "os.getenv" "$CHAIN_CLIENT"; then
+            echo "FAIL: chain_client.py does not load keys from env"
+            FOUND=1
+          fi
+
+          if [ $FOUND -eq 0 ]; then
+            echo "PASS: No hardcoded private keys found. Keys loaded from env only."
+          fi
+
+          exit $FOUND

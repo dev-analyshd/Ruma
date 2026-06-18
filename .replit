@@ -1,0 +1,55 @@
+modules = ["nodejs-20", "rust-stable", "python-3.11"]
+[agent]
+expertMode = true
+stack = "BEST_EFFORT_FALLBACK"
+integrations = ["python_anthropic_ai_integrations:1.0.0"]
+
+[nix]
+channel = "stable-25_05"
+packages = ["glibcLocales", "libxcrypt", "postgresql"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 -m uvicorn api.main:app --host 0.0.0.0 --port 5000"
+waitForPort = 5000
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 8000
+externalPort = 80
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+[userenv]
+
+[userenv.shared]
+PHAROS_REGISTRY = "0x6EAB7862385329BdaaD32f2b9587a66E768018Ba"
+PHAROS_VAULT = "0xAbC106D943a6Aff91A0B29f4a77E4009323d7A66"
+PHAROS_LEARNER = "0x799006C9b1e946d3A2909b81F3C3087D71bB9F84"
+PHAROS_NETWORK = "testnet"
+TRADING_ENABLED = "true"
+PORT = "5000"

@@ -1,0 +1,53 @@
+# Version control
+.git
+.gitignore
+
+# Secrets — NEVER bake into image
+.env
+*.pem
+*.key
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+*.egg-info/
+dist/
+build/
+
+# Rust build artifacts (rebuilt inside Docker)
+entropy/target/
+target/
+
+# FAISS index and runtime data (mounted as volumes)
+memory/faiss_index/
+data/
+logs/
+
+# Replit / IDE
+.replit
+replit.nix
+.upm/
+.local/
+.agents/
+attached_assets/
+
+# Docs / markdown not needed at runtime
+*.md
+!README.md
+
+# Node (if any frontend build artifacts)
+node_modules/
+.npm/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

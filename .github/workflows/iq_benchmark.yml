@@ -1,0 +1,216 @@
+name: SOVEREIGN-Ω IQ Benchmark — Convergence Proof
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Run nightly at 03:00 UTC (after stress tests at 02:00)
+    - cron: "0 3 * * *"
+
+jobs:
+  iq-convergence:
+    name: "IQ Convergence: 1k Evals × 7 Scenarios"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install numpy
+
+      - name: Create data dir
+        run: mkdir -p data
+
+      - name: Run IQ convergence benchmark
+        run: python3 tests/benchmarks/test_iq_convergence.py
+
+      - name: Verify convergence JSON
+        run: |
+          python3 -c "
+          import json
+          with open('data/iq_convergence_results.json') as f:
+              r = json.load(f)
+
+          # Ordering check
+          perfect = r['Perfect mastery']['final_iq']
+          zero    = r['Zero wins']['final_iq']
+          base    = r['Baseline (50%)']['final_iq']
+          assert perfect > 130, f'Perfect IQ={perfect:.1f} should be >130'
+          assert zero    < 70,  f'Zero IQ={zero:.1f} should be <70'
+          assert 85 <= base <= 115, f'Baseline IQ={base:.1f} should be near 100'
+
+          # Convergence check (tail_std < 2.0 for all)
+          for label, data in r.items():
+              ts = data['tail_std']
+              assert ts < 2.0, f'{label} tail_std={ts:.4f} >= 2.0 (not converged)'
+
+          # Diminishing updates
+          for label, data in r.items():
+              early = data['avg_early_delta']
+              late  = data['avg_late_delta']
+              assert late <= early + 1e-6, f'{label}: late_delta={late:.4f} > early_delta={early:.4f}'
+
+          print('PASS: All convergence assertions verified')
+          "
+
+      - name: Upload convergence results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iq-convergence-results
+          path: data/iq_convergence_results.json
+          retention-days: 30
+
+  iq-milestones:
+    name: "IQ Milestones: Thresholds, Uniqueness, Persistence"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install numpy
+
+      - name: Create data dir
+        run: mkdir -p data
+
+      - name: Run milestone benchmark
+        run: python3 tests/benchmarks/test_iq_milestones.py
+
+  iq-curve-plot:
+    name: "IQ Curve: ASCII Chart + JSON Output"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install numpy
+
+      - name: Create data dir
+        run: mkdir -p data
+
+      - name: Run curve plot benchmark
+        run: python3 tests/benchmarks/test_iq_curve_plot.py
+
+      - name: Print ASCII convergence chart
+        run: |
+          echo "═══════════════ IQ CONVERGENCE CHART ═══════════════"
+          cat data/iq_curve_ascii.txt
+          echo "════════════════════════════════════════════════════"
+
+      - name: Upload curve artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iq-curve-artifacts
+          path: |
+            data/iq_convergence_curves.json
+            data/iq_curve_ascii.txt
+          retention-days: 30
+
+  full-iq-suite:
+    name: "Full IQ Suite (all 3 benchmarks)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install numpy
+
+      - name: Create data dir
+        run: mkdir -p data
+
+      - name: Run full IQ benchmark suite
+        run: python3 tests/benchmarks/run_all_benchmarks.py
+
+      - name: Print convergence chart
+        run: |
+          echo ""
+          echo "═══════════════ IQ CONVERGENCE CHART ═══════════════"
+          cat data/iq_curve_ascii.txt
+          echo "════════════════════════════════════════════════════"
+          echo ""
+
+      - name: Verify IQ summary
+        run: |
+          python3 -c "
+          import json
+          with open('data/benchmark_summary.json') as f:
+              s = json.load(f)
+          print(f'Total passed: {s[\"total_passed\"]}')
+          print(f'Total failed: {s[\"total_failed\"]}')
+          assert s['total_failed'] == 0, f'{s[\"total_failed\"]} benchmarks failed'
+          print('PASS: All IQ benchmarks verified')
+          "
+
+      - name: Upload all benchmark artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iq-benchmark-full
+          path: data/
+          retention-days: 60
+
+  learning-proof-badge:
+    name: "Learning Proof: SOVEREIGN-Ω Learns Correctly"
+    runs-on: ubuntu-latest
+    needs:
+      - iq-convergence
+      - iq-milestones
+      - iq-curve-plot
+    if: always()
+
+    steps:
+      - name: Evaluate learning proof
+        run: |
+          CONV='${{ needs.iq-convergence.result }}'
+          MILE='${{ needs.iq-milestones.result }}'
+          CURV='${{ needs.iq-curve-plot.result }}'
+
+          echo "IQ Convergence:  $CONV"
+          echo "IQ Milestones:   $MILE"
+          echo "IQ Curve Plot:   $CURV"
+
+          if [ "$CONV" = "success" ] && [ "$MILE" = "success" ] && [ "$CURV" = "success" ]; then
+            echo ""
+            echo "╔══════════════════════════════════════════════════╗"
+            echo "║  SOVEREIGN-Ω LEARNING PROOF: PASSED             ║"
+            echo "║  IQ converges. Milestones fire correctly.       ║"
+            echo "║  Pearson scoring validated over 1,000 evals.   ║"
+            echo "║  SOVEREIGN-Ω learns correctly.                  ║"
+            echo "╚══════════════════════════════════════════════════╝"
+            exit 0
+          else
+            echo ""
+            echo "╔══════════════════════════════════════════════════╗"
+            echo "║  LEARNING PROOF: FAILED                         ║"
+            echo "║  Review failures before deployment.             ║"
+            echo "╚══════════════════════════════════════════════════╝"
+            exit 1
+          fi

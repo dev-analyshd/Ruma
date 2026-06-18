@@ -1,0 +1,233 @@
+name: SOVEREIGN-Ω Stress Tests — 10k Cycle Mathematical Proof
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Run nightly at 02:00 UTC
+    - cron: "0 2 * * *"
+
+jobs:
+  moat-growth-curve:
+    name: "Moat Growth: 10k Cycles, Random η/ρ"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install numpy
+
+      - name: Create data dir
+        run: mkdir -p data
+
+      - name: Run moat growth curve stress test
+        run: python3 tests/stress/test_moat_growth_curve.py
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: moat-growth-results
+          path: data/stress_test_results.json
+          retention-days: 30
+
+  exponential-shape:
+    name: "Exponential Shape: Λ(N) = Λ₀·e^(N·log(1+η·ρ))"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install numpy
+
+      - name: Create data dir
+        run: mkdir -p data
+
+      - name: Run exponential shape validation
+        run: python3 tests/stress/test_exponential_shape.py
+
+      - name: Verify R² > 0.9999999 (linearity assertion)
+        run: |
+          python3 -c "
+          import json
+          with open('data/exponential_shape_results.json') as f:
+              r = json.load(f)
+          print(f'R² = {r[\"r_squared\"]}')
+          print(f'slope_error = {r[\"slope_error\"]}')
+          print(f'max_error_pct = {r[\"max_error_pct\"]}')
+          assert r['r_squared'] > 0.9999999, f'R² too low: {r[\"r_squared\"]}'
+          assert r['slope_error'] < 1e-8, f'Slope error too large: {r[\"slope_error\"]}'
+          assert r['max_error_pct'] < 0.1, f'Max error too large: {r[\"max_error_pct\"]}%'
+          print('PASS: All shape assertions hold')
+          "
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exponential-shape-results
+          path: data/exponential_shape_results.json
+          retention-days: 30
+
+  coherence-cycle-stress:
+    name: "Coherence Cycle: 10k Full Plane Computations"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install numpy
+
+      - name: Create data dir
+        run: mkdir -p data
+
+      - name: Run coherence cycle stress test
+        run: python3 tests/stress/test_coherence_cycle_stress.py
+
+      - name: Verify Ψ statistics
+        run: |
+          python3 -c "
+          import json
+          with open('data/coherence_stress_results.json') as f:
+              r = json.load(f)
+          print(f'Ψ mean = {r[\"psi_mean\"]:.6f}')
+          print(f'Ψ std  = {r[\"psi_stdev\"]:.6f}')
+          print(f'Ψ min  = {r[\"psi_min\"]:.6f}')
+          print(f'Ψ max  = {r[\"psi_max\"]:.6f}')
+          print(f'Open%  = {r[\"open_rate\"]*100:.1f}%')
+          print(f'Avg cycle = {r[\"avg_cycle_ms\"]:.3f}ms')
+          assert 0.0 <= r['psi_min'], 'Ψ_min < 0'
+          assert r['psi_max'] <= 1.0, 'Ψ_max > 1'
+          assert 0.2 < r['psi_mean'] < 0.8, 'Ψ_mean degenerate'
+          assert r['open_rate'] > 0, 'Gate never opened'
+          assert r['open_rate'] < 1, 'Gate never closed'
+          print('PASS: All Ψ statistics valid')
+          "
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coherence-stress-results
+          path: data/coherence_stress_results.json
+          retention-days: 30
+
+  numerical-stability:
+    name: "Numerical Stability: Extremes, NaN, Overflow"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install numpy faiss-cpu 2>/dev/null || pip install numpy
+
+      - name: Create data dir
+        run: mkdir -p data
+
+      - name: Run numerical stability tests
+        run: python3 tests/stress/test_numerical_stability.py
+
+  full-stress-suite:
+    name: "Full Stress Suite (all 4 tests)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Only run on main branch push, not PRs (expensive)
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install numpy faiss-cpu 2>/dev/null || pip install numpy
+
+      - name: Create data dir
+        run: mkdir -p data
+
+      - name: Run full stress suite
+        run: python3 tests/stress/run_all_stress.py
+
+      - name: Upload all results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stress-suite-summary
+          path: data/
+          retention-days: 30
+
+  mathematical-proof-badge:
+    name: "Mathematical Proof: TRION Invariants"
+    runs-on: ubuntu-latest
+    needs:
+      - moat-growth-curve
+      - exponential-shape
+      - coherence-cycle-stress
+      - numerical-stability
+    if: always()
+
+    steps:
+      - name: Check all proofs passed
+        run: |
+          echo "Evaluating mathematical proof status..."
+          RESULTS='${{ toJSON(needs) }}'
+          echo "$RESULTS"
+
+          # Check each job
+          MGC='${{ needs.moat-growth-curve.result }}'
+          EXP='${{ needs.exponential-shape.result }}'
+          CCS='${{ needs.coherence-cycle-stress.result }}'
+          NUM='${{ needs.numerical-stability.result }}'
+
+          echo ""
+          echo "Moat Growth Curve:       $MGC"
+          echo "Exponential Shape:       $EXP"
+          echo "Coherence Cycle Stress:  $CCS"
+          echo "Numerical Stability:     $NUM"
+          echo ""
+
+          if [ "$MGC" = "success" ] && [ "$EXP" = "success" ] && \
+             [ "$CCS" = "success" ] && [ "$NUM" = "success" ]; then
+            echo "╔════════════════════════════════════════════╗"
+            echo "║  SOVEREIGN-Ω MATHEMATICAL PROOF: PASSED   ║"
+            echo "║  Exponential moat growth confirmed.        ║"
+            echo "║  All TRION invariants hold numerically.    ║"
+            echo "║  SOVEREIGN-Ω is mathematically coherent.  ║"
+            echo "╚════════════════════════════════════════════╝"
+            exit 0
+          else
+            echo "╔════════════════════════════════════════════╗"
+            echo "║  MATHEMATICAL PROOF: FAILED                ║"
+            echo "║  Review failures above before deployment.  ║"
+            echo "╚════════════════════════════════════════════╝"
+            exit 1
+          fi
