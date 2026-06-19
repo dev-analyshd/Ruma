@@ -13,6 +13,7 @@ from api.routes import cmc_routes, twak_routes
 from api.routes import telegram_routes
 from api.routes import strategy_routes, bnb_sdk_routes
 from api.routes import competition_dashboard
+from api.routes import trading_routes
 
 
 @asynccontextmanager
@@ -179,6 +180,9 @@ app.include_router(bnb_sdk_routes.router, prefix="/api/v1", tags=["BNB AI Agent 
 
 # ── Competition Dashboard + Emergency Stop ─────────────────────────────────────
 app.include_router(competition_dashboard.router, prefix="/api/v1", tags=["Competition Dashboard"])
+
+# ── Dynamic Trading Engine (5 adaptive modules) ────────────────────────────────
+app.include_router(trading_routes.router, prefix="/api/v1", tags=["Dynamic Trading Engine"])
 
 
 @app.get("/favicon.ico", include_in_schema=False)
