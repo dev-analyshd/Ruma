@@ -10,6 +10,7 @@ from api.routes import skills, agent_card, x402, mcp_server
 from api.routes import federation, stream, ws_dashboard
 from api.routes import memory
 from api.routes import cmc_routes, twak_routes
+from api.routes import telegram_routes
 
 
 @asynccontextmanager
@@ -90,6 +91,13 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(federation_beacon())
     asyncio.create_task(cmc_signal_loop())
 
+    # ── Telegram startup alert ─────────────────────────────────────────────────
+    try:
+        from notifications.telegram import alert_startup
+        await alert_startup(moat_acc.get_current_lambda(), moat_acc.n_cycles, iq)
+    except Exception:
+        pass
+
     print("[RUMA] All background loops running.")
     print(f"[RUMA] SSE streams: /api/v1/stream/intelligence | /stream/heartbeat | /stream/moat | /stream/actions")
     print(f"[RUMA] CMC Hub: /api/v1/cmc/fear-greed | /cmc/signals | /cmc/prices")
@@ -151,6 +159,9 @@ app.include_router(stream.router, prefix="/api/v1", tags=["Live Streaming (SSE)"
 
 # ── WebSocket Dashboard ───────────────────────────────────────────────────────
 app.include_router(ws_dashboard.router, tags=["Dashboard (WebSocket)"])
+
+# ── Telegram Alerts ───────────────────────────────────────────────────────────
+app.include_router(telegram_routes.router, prefix="/api/v1", tags=["Telegram Alerts"])
 
 
 @app.get("/favicon.ico", include_in_schema=False)

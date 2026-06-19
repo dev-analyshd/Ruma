@@ -437,6 +437,32 @@ async def _skill_trade_evaluate(inp: Dict) -> Dict:
     result["bsc_tx"] = bsc_tx
     result["execution_layer"] = "Trust Wallet Agent Kit (TWAK)"
     result["_psi"] = psi
+
+    # ── Telegram alert ────────────────────────────────────────────────────────
+    try:
+        from notifications.telegram import alert_trade_executed, alert_gate_silent
+        if result.get("action") == "EXECUTE":
+            await alert_trade_executed(
+                symbol=inp.get("symbol", "BNB/USDT"),
+                direction=inp.get("direction", "LONG"),
+                size_usd=result.get("size", 10.0) or 10.0,
+                psi=psi or 0.0,
+                delta=result.get("delta_trade", 0.0) or 0.0,
+                tx_hash=bsc_tx,
+                bscscan_url=None,
+                simulated=not twak_signed,
+                cmc_bias=cmc_bias,
+                kelly_fraction=result.get("kelly_fraction"),
+            )
+        elif result.get("action") in ("SILENCE", "HOLD"):
+            await alert_gate_silent(
+                query=f"{inp.get('direction','LONG')} {inp.get('symbol','BNB/USDT')}",
+                psi=psi or 0.0,
+                delta=result.get("delta_trade", 0.0) or 0.0,
+            )
+    except Exception:
+        pass
+
     return result
 
 

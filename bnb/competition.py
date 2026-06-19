@@ -72,7 +72,7 @@ class CompetitionManager:
             signed = self.client.w3.eth.account.sign_transaction(tx, pk)
             tx_hash = self.client.w3.eth.send_raw_transaction(signed.raw_transaction)
             receipt = self.client.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
-            return {
+            result = {
                 "success": receipt.status == 1, "simulated": False,
                 "agent_address": agent_address,
                 "competition_contract": COMPETITION_CONTRACT,
@@ -80,6 +80,17 @@ class CompetitionManager:
                 "network": os.getenv("BSC_NETWORK", "testnet"),
                 "bscscan": f"https://bscscan.com/tx/{tx_hash.hex()}",
             }
+            if result["success"]:
+                try:
+                    from notifications.telegram import alert_competition_registered
+                    await alert_competition_registered(
+                        agent_address=agent_address,
+                        tx_hash=tx_hash.hex(),
+                        network=os.getenv("BSC_NETWORK", "testnet"),
+                    )
+                except Exception:
+                    pass
+            return result
         except Exception as e:
             return {
                 "success": False, "error": str(e),
