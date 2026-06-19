@@ -6,7 +6,7 @@ integrations = ["python_anthropic_ai_integrations:1.0.0"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["cargo", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc"]
+packages = ["cargo", "glibcLocales", "libiconv", "libsodium", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc"]
 
 [workflows]
 runButton = "Project"

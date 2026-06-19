@@ -38,7 +38,6 @@ numpy>=1.26.0
 # ── Trading / Signal Processing ───────────────────────────────────────────────
 ccxt>=4.3.0
 pandas>=2.2.0
-pandas-ta>=0.3.14b
 
 # ── Sentence Embeddings (reasoning chain vectorisation) ──────────────────────
 sentence-transformers>=3.2.0
@@ -61,3 +60,39 @@ python-multipart
 sse-starlette
 uvicorn[standard]
 websockets
+fastapi
+pydantic
+python-dotenv
+python-multipart
+sse-starlette
+uvicorn[standard]
+websockets
+aiofiles
+aiohttp
+anthropic
+asyncpg
+ccxt
+cryptography
+eth-account
+eth-typing
+faiss-cpu
+fastapi
+hexbytes
+httpx
+numpy
+pandas
+pydantic
+PyNaCl
+python-dateutil
+python-dotenv
+python-multipart
+pytz
+sentence-transformers
+sqlalchemy
+sse-starlette
+ujson
+uvicorn[standard]
+web3
+websockets
+PyNaCl
+sqlalchemy
