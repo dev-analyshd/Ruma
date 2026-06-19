@@ -17,6 +17,11 @@ class IntelligenceScorer:
 
     IQ_BASE = 100.0   # Baseline: average agent
 
+    async def compute(self) -> float:
+        """Return just the IQ score as a float."""
+        data = await self.get_breakdown()
+        return data["iq_score"]
+
     async def get_breakdown(self) -> dict:
         from core.moat_accumulator import get_moat
         from core.silence_protocol import get_silence_protocol
