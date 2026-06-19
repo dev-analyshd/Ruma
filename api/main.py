@@ -11,6 +11,7 @@ from api.routes import federation, stream, ws_dashboard
 from api.routes import memory
 from api.routes import cmc_routes, twak_routes
 from api.routes import telegram_routes
+from api.routes import strategy_routes, bnb_sdk_routes
 
 
 @asynccontextmanager
@@ -91,6 +92,10 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(federation_beacon())
     asyncio.create_task(cmc_signal_loop())
 
+    # ── Competition week trading scheduler (Track 1 — 1 trade/day minimum) ────
+    from bnb.trading_scheduler import competition_scheduler_loop
+    asyncio.create_task(competition_scheduler_loop())
+
     # ── Telegram startup alert ─────────────────────────────────────────────────
     try:
         from notifications.telegram import alert_startup
@@ -103,6 +108,8 @@ async def lifespan(app: FastAPI):
     print(f"[RUMA] CMC Hub: /api/v1/cmc/fear-greed | /cmc/signals | /cmc/prices")
     print(f"[RUMA] TWAK: /api/v1/twak/status | /twak/portfolio | /twak/swap")
     print(f"[RUMA] BSC: /api/v1/bnb/status | /bnb/competition/register | /bnb/competition/status")
+    print(f"[RUMA] Track 2: /api/v1/strategy/catalog | /strategy/spec/BNB | /strategy/backtest")
+    print(f"[RUMA] BNB SDK: /api/v1/bnb-sdk/status | /bnb-sdk/skills | /bnb-sdk/execute")
 
     yield
 
@@ -162,6 +169,12 @@ app.include_router(ws_dashboard.router, tags=["Dashboard (WebSocket)"])
 
 # ── Telegram Alerts ───────────────────────────────────────────────────────────
 app.include_router(telegram_routes.router, prefix="/api/v1", tags=["Telegram Alerts"])
+
+# ── Track 2: CMC Strategy Skill ───────────────────────────────────────────────
+app.include_router(strategy_routes.router, prefix="/api/v1", tags=["Track 2: Strategy Skills"])
+
+# ── BNB AI Agent SDK (special prize) ─────────────────────────────────────────
+app.include_router(bnb_sdk_routes.router, prefix="/api/v1", tags=["BNB AI Agent SDK"])
 
 
 @app.get("/favicon.ico", include_in_schema=False)
