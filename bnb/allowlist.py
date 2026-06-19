@@ -13,6 +13,8 @@ Non-listed tokens → SILENCE (not disqualification).
 from __future__ import annotations
 
 # ── 149 Eligible BEP-20 Symbols ───────────────────────────────────────────────
+# Alias used by some modules — both names work
+
 # Top tokens by BSC liquidity / market cap. Agent focuses on top 20 for depth.
 ELIGIBLE_SYMBOLS: set[str] = {
     # Tier 1 — Highest liquidity (primary targets)
@@ -124,6 +126,9 @@ def get_token_address(symbol: str, testnet: bool = False) -> str | None:
     if testnet:
         return TOKEN_TESTNET_ADDRESSES.get(sym)
     return TOKEN_MAINNET_ADDRESSES.get(sym)
+
+
+ELIGIBLE_TOKENS = ELIGIBLE_SYMBOLS
 
 
 def validate_trade_symbol(symbol: str) -> tuple[bool, str]:
