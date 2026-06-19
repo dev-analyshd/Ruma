@@ -307,98 +307,123 @@ async def root():
   </div>
 
   <div class="card">
-    <h2>🧠 CMC AI Agent Hub</h2>
+    <h2>🧠 CMC AI Agent Hub — 12 Tools</h2>
     <div class="metric"><span class="metric-label">Market Bias</span><span class="metric-value big" style="color:#{'40ff80' if cmc_bias=='BULLISH' else ('ff4060' if cmc_bias=='BEARISH' else 'ffa040')}">{cmc_bias}</span></div>
-    <div class="metric"><span class="metric-label">Fear & Greed Index</span><span class="metric-value">{cmc_fg}</span></div>
-    <div class="metric"><span class="metric-label">BNB 1h Change</span><span class="metric-value">{cmc_bnb_1h}%</span></div>
-    <div class="metric"><span class="metric-label">MCP Endpoint</span><span class="metric-value" style="font-size:0.7rem">mcp.coinmarketcap.com</span></div>
-    <div class="metric"><span class="metric-label">x402 Payments</span><span class="metric-value green">ACTIVE</span></div>
+    <div class="metric"><span class="metric-label">Fear & Greed</span><span class="metric-value">{cmc_fg} · MCP: mcp.coinmarketcap.com</span></div>
+    <div class="metric"><span class="metric-label">BNB 1h</span><span class="metric-value">{cmc_bnb_1h}%</span></div>
+    <div class="metric"><span class="metric-label">x402 Protocol</span><span class="metric-value green">ACTIVE — every CMC call</span></div>
     <div class="links" style="margin-top:0.8rem">
-      <a class="link" href="/api/v1/cmc/fear-greed"><span class="method">GET</span> /fear-greed</a>
-      <a class="link" href="/api/v1/cmc/signals"><span class="method">GET</span> /signals</a>
-      <a class="link" href="/api/v1/cmc/prices"><span class="method">GET</span> /prices</a>
-      <a class="link" href="/api/v1/cmc/analyze"><span class="method">POST</span> /analyze</a>
+      <a class="link" href="/api/v1/cmc/fear-greed"><span class="method">1</span> fear-greed</a>
+      <a class="link" href="/api/v1/cmc/prices"><span class="method">2</span> prices</a>
+      <a class="link" href="/api/v1/cmc/global-metrics"><span class="method">3</span> global-metrics</a>
+      <a class="link" href="/api/v1/cmc/trending"><span class="method">4</span> trending</a>
+      <a class="link" href="/api/v1/cmc/technical-indicators"><span class="method">5</span> tech-indicators</a>
+      <a class="link" href="/api/v1/cmc/on-chain"><span class="method">6</span> on-chain</a>
+      <a class="link" href="/api/v1/cmc/social-sentiment"><span class="method">7</span> social</a>
+      <a class="link" href="/api/v1/cmc/derivatives"><span class="method">8</span> derivatives</a>
+      <a class="link" href="/api/v1/cmc/market-pairs"><span class="method">9</span> market-pairs</a>
+      <a class="link" href="/api/v1/cmc/categories"><span class="method">10</span> categories</a>
+      <a class="link" href="/api/v1/cmc/news"><span class="method">11</span> news</a>
+      <a class="link" href="/api/v1/cmc/ohlcv"><span class="method">12</span> ohlcv</a>
     </div>
   </div>
 
   <div class="card">
-    <h2>🔐 TWAK (Trust Wallet)</h2>
-    <div class="metric"><span class="metric-label">Execution Layer</span><span class="metric-value green">TWAK (Self-Custody)</span></div>
-    <div class="metric"><span class="metric-label">Local Signing</span><span class="metric-value green">✓ Keys Never Leave Env</span></div>
-    <div class="metric"><span class="metric-label">Autonomous Mode</span><span class="metric-value green">ACTIVE</span></div>
-    <div class="metric"><span class="metric-label">Chain</span><span class="metric-value">BNB Smart Chain (BSC)</span></div>
+    <h2>🤖 Autonomous Decision Chain</h2>
+    <div class="metric"><span class="metric-label">CMC → TRION Ψ → TWAK</span><span class="metric-value green">LIVE</span></div>
+    <div class="metric"><span class="metric-label">Pipeline Steps</span><span class="metric-value">4 (CMC · Ψ · Risk · TWAK)</span></div>
+    <div class="metric"><span class="metric-label">Human in Loop</span><span class="metric-value orange">NONE — fully autonomous</span></div>
+    <div class="metric"><span class="metric-label">Silence Rate</span><span class="metric-value orange">~87% (gate working)</span></div>
+    <div class="links" style="margin-top:0.8rem">
+      <a class="link" href="/api/v1/autonomous/demo"><span class="method">GET</span> /demo (run now)</a>
+      <a class="link" href="/api/v1/autonomous/flow"><span class="method">GET</span> /flow (diagram)</a>
+      <a class="link" href="/api/v1/competition/proof"><span class="method">GET</span> /proof (judges)</a>
+      <a class="link" href="/api/v1/competition/risk-metrics"><span class="method">GET</span> /risk-metrics</a>
+      <a class="link" href="/api/v1/x402/audit"><span class="method">GET</span> /x402/audit</a>
+      <a class="link" href="/api/v1/competition/dashboard"><span class="method">GET</span> /dashboard</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🔐 TWAK — Self-Custody Execution</h2>
+    <div class="metric"><span class="metric-label">Execution Layer</span><span class="metric-value green">TWAK (local signing)</span></div>
+    <div class="metric"><span class="metric-label">Keys</span><span class="metric-value green">✓ Never leave environment</span></div>
+    <div class="metric"><span class="metric-label">DEX</span><span class="metric-value">PancakeSwap V2 · BSC</span></div>
+    <div class="metric"><span class="metric-label">x402 Payments</span><span class="metric-value green">Fires on every CMC call</span></div>
     <div class="links" style="margin-top:0.8rem">
       <a class="link" href="/api/v1/twak/status"><span class="method">GET</span> /status</a>
       <a class="link" href="/api/v1/twak/portfolio"><span class="method">GET</span> /portfolio</a>
+      <a class="link" href="/api/v1/bnb/competition/status"><span class="method">GET</span> /competition</a>
+      <a class="link" href="/api/v1/strategy/scheduler"><span class="method">GET</span> /scheduler</a>
     </div>
   </div>
 
   <div class="card">
-    <h2>⛓ BNB Chain (BSC)</h2>
-    <div class="metric"><span class="metric-label">Network</span><span class="metric-value">BSC (Chain ID 56)</span></div>
-    <div class="metric"><span class="metric-label">Chain Syncs</span><span class="metric-value green">{stats['total_chain_syncs']}</span></div>
-    <div class="metric"><span class="metric-label">Competition Contract</span><span class="metric-value" style="font-size:0.65rem">0x212c...aed5</span></div>
-    <div class="links" style="margin-top:0.8rem">
-      <a class="link" href="/api/v1/bnb/status"><span class="method">GET</span> /status</a>
-      <a class="link" href="/api/v1/bnb/competition/status"><span class="method">GET</span> /competition/status</a>
-    </div>
-    <div class="note-box" style="margin-top:0.5rem">Registration: POST /api/v1/bnb/competition/register<br>or: twak compete register</div>
-  </div>
-
-  <div class="card">
-    <h2>🎯 6 Agent Skills</h2>
-    <div class="metric"><span class="metric-label">coherence_evaluate</span><span class="metric-value" style="color:#40ff80;font-size:0.75rem">FREE (CMC-enriched)</span></div>
-    <div class="metric"><span class="metric-label">moat_status</span><span class="metric-value" style="color:#40ff80;font-size:0.75rem">FREE</span></div>
-    <div class="metric"><span class="metric-label">silence_check</span><span class="metric-value" style="color:#40ff80;font-size:0.75rem">FREE</span></div>
-    <div class="metric"><span class="metric-label">intelligence_score</span><span class="metric-value" style="color:#40ff80;font-size:0.75rem">FREE</span></div>
-    <div class="metric"><span class="metric-label">trade_evaluate</span><span class="metric-value" style="color:#ffa040;font-size:0.75rem">0.001 BNB / 0.10 USDT</span></div>
-    <div class="metric"><span class="metric-label">reasoning_chain</span><span class="metric-value" style="color:#ffa040;font-size:0.75rem">0.002 BNB / 0.20 USDT</span></div>
-    <div class="note-box" style="margin-top:0.8rem">MCP + x402 (BSC) · <a href="/api/v1/skills" style="color:#60c060">View all skills →</a></div>
-  </div>
-
-  <div class="card">
-    <h2>🧠 TRION Coherence</h2>
-    <div class="metric"><span class="metric-label">Ψ Formula</span><span class="metric-value" style="font-size:0.75rem">0.25P + 0.30I + 0.20C + 0.15S + 0.10W</span></div>
-    <div class="metric"><span class="metric-label">W-plane Source</span><span class="metric-value" style="font-size:0.75rem">CMC Fear & Greed z-score</span></div>
-    <div class="metric"><span class="metric-label">P-plane Source</span><span class="metric-value" style="font-size:0.75rem">CMC price entropy</span></div>
-    <div class="metric"><span class="metric-label">Gate Base Δ</span><span class="metric-value">0.6500</span></div>
-    <div class="metric"><span class="metric-label">Silence rate</span><span class="metric-value orange">~87% (discriminating)</span></div>
+    <h2>🧠 TRION Ψ Coherence Gate</h2>
+    <div class="metric"><span class="metric-label">Formula</span><span class="metric-value" style="font-size:0.7rem">Ψ = 0.22P + 0.25I + 0.18C + 0.13S + 0.10W + 0.12A</span></div>
+    <div class="metric"><span class="metric-label">P-plane</span><span class="metric-value" style="font-size:0.75rem">CMC price entropy (Tool 2)</span></div>
+    <div class="metric"><span class="metric-label">I-plane</span><span class="metric-value" style="font-size:0.75rem">CMC tech indicators (Tool 5)</span></div>
+    <div class="metric"><span class="metric-label">W-plane</span><span class="metric-value" style="font-size:0.75rem">CMC Fear & Greed (Tool 1)</span></div>
+    <div class="metric"><span class="metric-label">Silence rate</span><span class="metric-value orange">~87% — gate discriminating</span></div>
     <div class="silence-box">
-      <p>When Ψ &lt; Δ the agent is SILENT. Silence is not failure — it's the gate making the right decision. RUMA silences ~87% of all potential BSC trade signals.</p>
+      <p>6 cognitive planes, all fed by CMC AI Agent Hub. Ψ &lt; Δ → SILENCE. Ψ ≥ Δ → TWAK signs the BSC swap. Judges: see <a href="/api/v1/competition/proof" style="color:#f0b90b">/competition/proof</a> for Ψ history.</p>
     </div>
   </div>
 
   <div class="card">
-    <h2>📡 Live SSE Streams</h2>
-    <div class="links">
-      <a class="link" href="/api/v1/stream/intelligence"><span class="method">SSE</span> /intelligence</a>
-      <a class="link" href="/api/v1/stream/heartbeat"><span class="method">SSE</span> /heartbeat</a>
-      <a class="link" href="/api/v1/stream/moat"><span class="method">SSE</span> /moat</a>
-      <a class="link" href="/api/v1/stream/actions"><span class="method">SSE</span> /actions</a>
+    <h2>📈 Track 2: Strategy Skills</h2>
+    <div class="metric"><span class="metric-label">Strategies</span><span class="metric-value">Momentum · Divergence · Regime</span></div>
+    <div class="metric"><span class="metric-label">Ensemble</span><span class="metric-value">Weighted Kelly (25% fractional)</span></div>
+    <div class="metric"><span class="metric-label">Backtest Data</span><span class="metric-value">CMC OHLCV (real price history)</span></div>
+    <div class="metric"><span class="metric-label">Risk Metrics</span><span class="metric-value">Sharpe + Sortino + Calmar</span></div>
+    <div class="links" style="margin-top:0.8rem">
+      <a class="link" href="/api/v1/strategy/catalog"><span class="method">GET</span> /catalog</a>
+      <a class="link" href="/api/v1/strategy/spec/BNB"><span class="method">GET</span> /spec/BNB</a>
     </div>
-    <h2 style="margin-top:1.2rem">🔗 Explore</h2>
-    <div class="links" style="margin-top:0.5rem">
-      <a class="link" href="/docs"><span class="method">UI</span> Swagger Docs</a>
+    <div class="note-box" style="margin-top:0.5rem">Backtest: POST /api/v1/strategy/backtest · Returns Sharpe + Sortino</div>
+  </div>
+
+  <div class="card">
+    <h2>🎯 Agent Skills (MCP + x402)</h2>
+    <div class="metric"><span class="metric-label">coherence_evaluate</span><span class="metric-value" style="color:#40ff80;font-size:0.75rem">FREE (6-plane, CMC-fed)</span></div>
+    <div class="metric"><span class="metric-label">trade_evaluate</span><span class="metric-value" style="color:#ffa040;font-size:0.75rem">0.001 BNB (x402)</span></div>
+    <div class="metric"><span class="metric-label">moat_status</span><span class="metric-value" style="color:#40ff80;font-size:0.75rem">FREE</span></div>
+    <div class="metric"><span class="metric-label">reasoning_chain</span><span class="metric-value" style="color:#ffa040;font-size:0.75rem">0.002 BNB (x402)</span></div>
+    <div class="links" style="margin-top:0.8rem">
+      <a class="link" href="/api/v1/skills"><span class="method">GET</span> /skills</a>
+      <a class="link" href="/api/v1/bnb-sdk/status"><span class="method">GET</span> /bnb-sdk</a>
+      <a class="link" href="/docs"><span class="method">UI</span> Swagger</a>
       <a class="link" href="/.well-known/agent.json"><span class="method">A2A</span> Agent Card</a>
-      <a class="link" href="/api/v1/health"><span class="method">GET</span> /health</a>
-      <a class="link" href="/api/v1/moat"><span class="method">GET</span> /moat</a>
     </div>
   </div>
 
   <div class="card" style="grid-column:1/-1">
-    <h2>📊 Domain Mastery</h2>
-    <table>
-      <thead><tr><th>Domain</th><th>Mastery M(d,t)</th><th>Knowledge Count</th></tr></thead>
-      <tbody>{domain_rows}</tbody>
-    </table>
+    <h2>📡 Live Streams · 📊 Domain Mastery</h2>
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:1.5rem">
+      <div>
+        <div class="links">
+          <a class="link" href="/api/v1/stream/intelligence"><span class="method">SSE</span> /intelligence</a>
+          <a class="link" href="/api/v1/stream/heartbeat"><span class="method">SSE</span> /heartbeat</a>
+          <a class="link" href="/api/v1/stream/moat"><span class="method">SSE</span> /moat</a>
+          <a class="link" href="/api/v1/stream/actions"><span class="method">SSE</span> /actions</a>
+        </div>
+        <div class="note-box" style="margin-top:0.8rem">⛓ BSC Syncs: <b>{stats['total_chain_syncs']}</b><br>⚡ Coherent Cycles: <b>{cycles:,}</b><br>🔮 Λ: <b>{lam_fmt}</b></div>
+      </div>
+      <div>
+        <table>
+          <thead><tr><th>Domain</th><th>Mastery M(d,t)</th><th>Knowledge</th></tr></thead>
+          <tbody>{domain_rows}</tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
 </div>
 
 <div style="text-align:center;padding:1.5rem;color:#3a3a6a;font-size:0.75rem;border-top:1px solid #1a1a2a">
-  RUMA v1.0.0 · BNB Hack: AI Trading Agent Edition · CoinMarketCap × Trust Wallet · June 2026
-  · Track 1: Autonomous Trading Agents · $36,000 Prize Pool
-  · <a href="/dashboard" style="color:#6060a0">Live Dashboard →</a>
+  RUMA v1.0.0 · BNB Hack: AI Trading Agent Edition · 12 CMC Tools · TWAK Self-Custody · TRION Ψ Gate · June 2026
+  · <a href="/api/v1/autonomous/demo" style="color:#f0b90b">▶ Run Autonomous Demo →</a>
+  · <a href="/api/v1/competition/proof" style="color:#6060a0">Judge Proof Package →</a>
   · <a href="/docs" style="color:#6060a0">API Docs →</a>
 </div>
 </body>
