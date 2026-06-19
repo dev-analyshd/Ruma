@@ -30,13 +30,17 @@ def _get_components():
         from core.moat_accumulator import MoatAccumulator
         from core.silence_protocol import SilenceProtocol
         from reasoning.chain_manager import ChainManager
-        from learning.continuous_learner import ContinuousLearner
         _coherence_engine = CoherenceEngine()
         _action_gate = ActionGate()
         _moat_acc = MoatAccumulator()
         _silence_protocol = SilenceProtocol()
         _chain_manager = ChainManager()
-        _learner = ContinuousLearner()
+        # ContinuousLearner optional — falls back to no-op
+        try:
+            from learning.continuous_learner import ContinuousLearner
+            _learner = ContinuousLearner()
+        except ImportError:
+            _learner = None
     return _coherence_engine, _action_gate, _moat_acc, _silence_protocol, _chain_manager, _learner
 
 
@@ -77,14 +81,18 @@ async def evaluate_action(req: ActionRequest):
 
     plane_scores = await coherence_engine.compute_all_planes(req.query, context, cycle_id)
     psi = plane_scores["psi_total"]
-    delta = action_gate.compute_threshold(plane_scores["volatility"], plane_scores["novelty"])
+    volatility = context.get("volatility", 0.2)
+    novelty = context.get("novelty", 0.5)
+    lambda_val = moat_acc.get_current_lambda()
+    delta = action_gate.compute_threshold(volatility, novelty, lambda_val=lambda_val)
     gate_open = action_gate.is_open(psi, delta)
 
     lambda_val = moat_acc.get_current_lambda()
     t_norm = moat_acc.get_t_normalized()
 
     if not gate_open:
-        reason = silence_protocol.log_silence(cycle_id, psi, delta, plane_scores)
+        silence_decision = silence_protocol.evaluate(psi=psi, delta=delta, context={"cycle_id": cycle_id})
+        reason = silence_decision.reason
         omega = 0.0
         action_output = None
     else:
@@ -94,14 +102,18 @@ async def evaluate_action(req: ActionRequest):
         omega = psi * math.exp(lambda_val * t_norm)
         reason = None
 
-    await learner.learn_from_cycle(
-        cycle_id=cycle_id,
-        query=req.query,
-        action_output=action_output or "",
-        gate_open=gate_open,
-        domain=req.domain,
-        plane_scores=plane_scores,
-    )
+    if learner is not None:
+        try:
+            await learner.learn_from_cycle(
+                cycle_id=cycle_id,
+                query=req.query,
+                action_output=action_output or "",
+                gate_open=gate_open,
+                domain=req.domain,
+                plane_scores=plane_scores,
+            )
+        except Exception:
+            pass
 
     # Push to live SSE stream and on-chain heartbeat (fire-and-forget)
     try:

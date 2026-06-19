@@ -203,7 +203,7 @@ SKILLS_MANIFEST = {
 
 
 class SkillInvokeRequest(BaseModel):
-    skill_id: str
+    skill_id: Optional[str] = None  # provided in URL path; body field optional for backward compat
     input: Dict[str, Any] = {}
     caller_address: Optional[str] = None
     x402_payment_tx: Optional[str] = None

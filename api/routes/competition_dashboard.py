@@ -223,9 +223,9 @@ async def competition_rank():
     Falls back to self-reported stats if contract unreachable.
     """
     from bnb.competition import CompetitionManager
-    from bnb.chain_client import BSCChainClient
+    from bnb.chain_client import BSCClient
     try:
-        chain = BSCChainClient()
+        chain = BSCClient()
         mgr = CompetitionManager(chain)
         agent = _state.agent_address or os.getenv("TWAK_AGENT_WALLET", "")
         registered = False

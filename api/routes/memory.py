@@ -37,8 +37,11 @@ async def search_memory(req: MemorySearchRequest):
     Each memory is a reasoning cycle embedding — query in natural language to find
     what the agent was thinking about in similar situations.
     """
-    from memory.timescale_store import TimescaleStore, _get_pool
-    from reasoning.embedding_engine import EmbeddingEngine
+    try:
+        from memory.timescale_store import TimescaleStore, _get_pool
+        from reasoning.embedding_engine import EmbeddingEngine
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Memory store not available (TimescaleDB not configured)")
 
     pool = await _get_pool()
     if pool is None:
@@ -113,7 +116,10 @@ async def search_memory(req: MemorySearchRequest):
 @router.get("/memory/stats", tags=["Memory"])
 async def memory_stats():
     """Overview of stored memories — total count, domain breakdown, gate-open ratio."""
-    from memory.timescale_store import _get_pool
+    try:
+        from memory.timescale_store import _get_pool
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Memory store not available (TimescaleDB not configured)")
 
     pool = await _get_pool()
     if pool is None:

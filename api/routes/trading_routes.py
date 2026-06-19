@@ -344,7 +344,8 @@ async def full_pipeline(
         lambda_val=lambda_val,
         consecutive_wins=agent_ctx.get("consecutive_wins", 0),
         fear_greed=fg,
-        stress=0.0,
+        vol_30d=0.025,
+        price_change_5m=0.0,
     )
     any_breaker = any(cb.is_active() for cb in risk.circuit_breakers)
     final_action = "SILENCE"
@@ -428,6 +429,27 @@ async def all_strategies(
         "selected": next(
             (s["strategy"] for s in signals if not s["silenced"]), "SILENCE"
         ),
+    }
+
+
+
+
+@router.get("/trading/strategies/performance")
+async def strategies_performance():
+    """
+    Per-strategy win rates and P&L from recorded outcomes.
+    Shows on-chain learning progress — RUMA getting smarter over time.
+    """
+    from trading.strategy_registry import get_registry
+    registry = get_registry()
+    perf = registry.strategy_performance_summary()
+    return {
+        "ok": True,
+        "timestamp": time.time(),
+        "total_strategies": 10,
+        "strategies_with_history": len(perf),
+        "performance": perf,
+        "note": "Win rates update after each recorded outcome. Empty until trading begins (June 22).",
     }
 
 
@@ -519,23 +541,4 @@ async def record_strategy_outcome(payload: OutcomePayload):
         "won": payload.won,
         "error": round(abs(payload.predicted_return - payload.actual_return), 5),
         "strategy_performance": match,
-    }
-
-
-@router.get("/trading/strategies/performance")
-async def strategies_performance():
-    """
-    Per-strategy win rates and P&L from recorded outcomes.
-    Shows on-chain learning progress — RUMA getting smarter over time.
-    """
-    from trading.strategy_registry import get_registry
-    registry = get_registry()
-    perf = registry.strategy_performance_summary()
-    return {
-        "ok": True,
-        "timestamp": time.time(),
-        "total_strategies": 10,
-        "strategies_with_history": len(perf),
-        "performance": perf,
-        "note": "Win rates update after each recorded outcome. Empty until trading begins (June 22).",
     }
