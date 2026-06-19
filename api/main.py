@@ -14,6 +14,7 @@ from api.routes import telegram_routes
 from api.routes import strategy_routes, bnb_sdk_routes
 from api.routes import competition_dashboard
 from api.routes import trading_routes
+from api.routes import autonomous_demo
 
 
 @asynccontextmanager
@@ -112,6 +113,10 @@ async def lifespan(app: FastAPI):
     print(f"[RUMA] BSC: /api/v1/bnb/status | /bnb/competition/register | /bnb/competition/status")
     print(f"[RUMA] Track 2: /api/v1/strategy/catalog | /strategy/spec/BNB | /strategy/backtest")
     print(f"[RUMA] BNB SDK: /api/v1/bnb-sdk/status | /bnb-sdk/skills | /bnb-sdk/execute")
+    print(f"[RUMA] CMC Hub (12 tools): /api/v1/cmc/fear-greed | /cmc/trending | /cmc/technical-indicators | /cmc/on-chain | /cmc/social-sentiment | /cmc/derivatives | /cmc/market-pairs | /cmc/categories | /cmc/news | /cmc/ohlcv | /cmc/signals | /cmc/analyze")
+    print(f"[RUMA] Autonomous Demo: /api/v1/autonomous/demo | /autonomous/flow | /autonomous/trigger")
+    print(f"[RUMA] Risk Metrics: /api/v1/competition/risk-metrics (Sharpe, Sortino, Calmar)")
+    print(f"[RUMA] x402 Audit: /api/v1/x402/audit | /api/v1/competition/proof")
 
     yield
 
@@ -183,6 +188,9 @@ app.include_router(competition_dashboard.router, prefix="/api/v1", tags=["Compet
 
 # ── Dynamic Trading Engine (5 adaptive modules) ────────────────────────────────
 app.include_router(trading_routes.router, prefix="/api/v1", tags=["Dynamic Trading Engine"])
+
+# ── Autonomous Decision Chain Demo (Track 1 judge evidence) ────────────────────
+app.include_router(autonomous_demo.router, prefix="/api/v1", tags=["Autonomous Demo"])
 
 
 @app.get("/favicon.ico", include_in_schema=False)

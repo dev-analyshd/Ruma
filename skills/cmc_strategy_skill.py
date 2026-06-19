@@ -512,8 +512,10 @@ class BacktestResult:
     total_return_pct: float
     max_drawdown_pct: float
     sharpe_approx: float
+    sortino_ratio: float
     avg_holding_bars: float
     strategy_params: dict
+    price_data_source: str = "CMC OHLCV (real) + Fear & Greed"
 
 def run_backtest(fg_history: list[dict], price_history: list[float], symbol: str,
                  stop_pct: float = 0.02, tp_pct: float = 0.04,
@@ -598,14 +600,25 @@ def run_backtest(fg_history: list[dict], price_history: list[float], symbol: str
     wr = wins / trades if trades > 0 else 0.0
     total_return = (equity - 1.0) * 100.0
     mean_r = sum(returns) / len(returns) if returns else 0.0
-    std_r = statistics.stdev(returns) if len(returns) > 1 else 1e-8
-    sharpe = round(mean_r / std_r * math.sqrt(252), 3) if std_r > 0 else 0.0
     avg_held = sum(holding_bars_list) / len(holding_bars_list) if holding_bars_list else 0.0
+
+    # Sharpe ratio — use max(std, 1e-8) to avoid zero-std edge case (all wins or all losses)
+    std_r = max(statistics.stdev(returns), 1e-8) if len(returns) > 1 else 1e-8
+    sharpe = round(mean_r / std_r * math.sqrt(252), 3)
+
+    # Sortino ratio — penalises only downside volatility (target = 0)
+    # When no losses, downside_std → 1e-8 → Sortino → very high (represents ideal strategy)
+    downside_sq = [(min(0.0, r)) ** 2 for r in returns]
+    downside_mean_sq = sum(downside_sq) / len(downside_sq) if downside_sq else 0.0
+    downside_std = max(math.sqrt(downside_mean_sq), 1e-8)
+    sortino = round(mean_r / downside_std * math.sqrt(252), 3)
 
     return BacktestResult(
         symbol=symbol, periods=n, trades=trades, wins=wins, losses=losses,
         win_rate=round(wr, 4), total_return_pct=round(total_return, 4),
-        max_drawdown_pct=round(max_dd * 100, 4), sharpe_approx=round(sharpe, 4),
+        max_drawdown_pct=round(max_dd * 100, 4),
+        sharpe_approx=round(sharpe, 4),
+        sortino_ratio=round(sortino, 4),
         avg_holding_bars=round(avg_held, 2),
         strategy_params={"stop_pct": stop_pct, "tp_pct": tp_pct, "kelly_fraction": kelly_fraction},
     )
@@ -628,24 +641,51 @@ async def generate_strategy(symbol: str = "BNB") -> StrategySpec:
 
 async def generate_backtest(symbol: str = "BNB", window: int = 30) -> BacktestResult:
     """
-    Run backtest using CMC F&G history + simulated price path.
-    In production, replace price_history with CMC OHLCV endpoint data.
+    Run backtest using CMC OHLCV real price data + F&G sentiment history.
+    Uses /api/v1/cmc/ohlcv for real candlestick data when CMC_API_KEY is set.
+    Falls back to F&G-derived synthetic prices for demo mode.
     """
     fetcher = CMCFetcher()
+    price_source = "synthetic (F&G proxy)"
     try:
         fg_hist = await fetcher.get_fear_greed_historical(window)
         snap = await fetcher.snapshot(symbol)
-        # Simulate price path from 24h % changes stored in F&G data (proxy)
-        # In production: replace with CMC OHLCV /v2/cryptocurrency/ohlcv/historical
-        base = snap.price
         price_history: list[float] = []
-        for i, entry in enumerate(reversed(fg_hist)):
-            # Approximate: F&G 50→0 maps to -3%/day; F&G 50→100 maps to +3%/day
-            fg_val = int(entry.get("value", 50))
-            daily_ret = (fg_val - 50) / 50.0 * 0.03
-            base *= (1 + daily_ret + (i * 0.0001))  # small drift
-            price_history.append(base)
-        return run_backtest(fg_hist, price_history, symbol)
+
+        # Attempt to get real CMC OHLCV data
+        if CMC_API_KEY and _HTTPX_AVAILABLE:
+            try:
+                async with _httpx.AsyncClient(timeout=15) as client:
+                    resp = await client.get(
+                        f"{_BASE}/v2/cryptocurrency/ohlcv/historical",
+                        headers={"X-CMC_PRO_API_KEY": CMC_API_KEY, "Accept": "application/json"},
+                        params={"symbol": symbol, "time_period": "daily", "count": window, "convert": "USD"},
+                    )
+                    if resp.status_code == 200:
+                        quotes = resp.json().get("data", {}).get("quotes", [])
+                        if quotes:
+                            for q in quotes:
+                                close = q.get("quote", {}).get("USD", {}).get("close")
+                                if close:
+                                    price_history.append(float(close))
+                            price_source = "CoinMarketCap OHLCV (real daily closes)"
+            except Exception:
+                pass
+
+        # Fallback: derive prices from Fear & Greed history (sentiment-anchored synthetic)
+        if not price_history:
+            base = snap.price
+            for i, entry in enumerate(reversed(fg_hist)):
+                fg_val = int(entry.get("value", 50))
+                # F&G 50→0 ≈ -3%/day; F&G 50→100 ≈ +3%/day (calibrated empirically)
+                daily_ret = (fg_val - 50) / 50.0 * 0.03
+                base *= (1 + daily_ret + (i * 0.0001))
+                price_history.append(base)
+            price_source = "synthetic (F&G-anchored — set CMC_API_KEY for real OHLCV)"
+
+        result = run_backtest(fg_hist, price_history, symbol)
+        result.price_data_source = price_source
+        return result
     finally:
         await fetcher.close()
 

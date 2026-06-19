@@ -117,10 +117,11 @@ async def run_strategy_backtest(req: BacktestRequest):
     """
     Run a historical backtest of the CMC Strategy ensemble.
 
-    Uses CMC Fear & Greed historical data (free endpoint) + simulated price path.
-    In production / judging: replace simulated prices with CMC OHLCV endpoint.
+    Price data: CMC /v2/cryptocurrency/ohlcv/historical (real daily OHLCV when
+    CMC_API_KEY is set). Falls back to F&G-anchored synthetic prices for demo mode.
+    Sentiment data: Fear & Greed historical (alternative.me, always available).
 
-    Returns: win rate, total return, max drawdown, Sharpe approximation.
+    Returns: win rate, total return, max drawdown, Sharpe ratio, Sortino ratio.
     """
     symbol = req.symbol.upper()
     if req.window < 7 or req.window > 365:
@@ -131,14 +132,33 @@ async def run_strategy_backtest(req: BacktestRequest):
     try:
         from skills.cmc_strategy_skill import generate_backtest
         result = await generate_backtest(symbol, req.window)
+        bt_dict = asdict(result)
         return {
             "ok": True,
             "track": 2,
             "symbol": symbol,
-            "backtest": asdict(result),
+            "backtest": bt_dict,
+            "risk_adjusted": {
+                "sharpe_ratio": bt_dict.get("sharpe_approx"),
+                "sortino_ratio": bt_dict.get("sortino_ratio"),
+                "sharpe_interpretation": (
+                    "EXCELLENT" if (bt_dict.get("sharpe_approx") or 0) > 2
+                    else "GOOD" if (bt_dict.get("sharpe_approx") or 0) > 1
+                    else "ACCEPTABLE" if (bt_dict.get("sharpe_approx") or 0) > 0
+                    else "NEGATIVE"
+                ),
+                "sortino_interpretation": (
+                    "EXCELLENT" if (bt_dict.get("sortino_ratio") or 0) > 2
+                    else "GOOD" if (bt_dict.get("sortino_ratio") or 0) > 1
+                    else "ACCEPTABLE" if (bt_dict.get("sortino_ratio") or 0) > 0
+                    else "NEGATIVE"
+                ),
+                "note": "Sortino penalises only downside volatility — more relevant for trading strategies",
+            },
             "methodology": {
-                "data_source": "CMC Fear & Greed historical (free) + simulated price path",
-                "production_note": "Replace price_history with CMC /v2/cryptocurrency/ohlcv/historical for exact prices",
+                "price_data_source": bt_dict.get("price_data_source"),
+                "sentiment_data": "CoinMarketCap Fear & Greed historical (alternative.me fallback)",
+                "price_ohlcv_endpoint": "CMC /v2/cryptocurrency/ohlcv/historical (real when CMC_API_KEY set)",
                 "signal": "7-day rolling F&G slope + 24h price momentum",
                 "sizing": "Bayesian Kelly (25% fractional, 2% cap)",
                 "stop_pct": req.stop_pct,

@@ -241,12 +241,16 @@ class BNBAgentSDKClient:
         if direction == "NEUTRAL":
             return SDKExecutionResult(success=True, tx_hash=None, error=None, gas_used=0, method="native-neutral")
         client = TWAKClient()
-        side = "buy" if direction == "LONG" else "sell"
+        direction_str = "LONG" if direction == "LONG" else "SHORT"
         try:
-            result = await client.swap(base_token=base, quote_token="USDT", side=side,
-                                       amount_usd=10.0, slippage_pct=0.5)
+            result = await client.execute_swap(
+                symbol=f"{base}/USDT",
+                direction=direction_str,
+                size=10.0,
+                slippage_pct=0.5,
+            )
             return SDKExecutionResult(
-                success=result.get("success", False),
+                success=result.get("executed", False),
                 tx_hash=result.get("tx_hash"),
                 error=result.get("error"),
                 gas_used=result.get("gas_used", 0),
