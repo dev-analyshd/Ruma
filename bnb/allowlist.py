@@ -139,3 +139,8 @@ def validate_trade_symbol(symbol: str) -> tuple[bool, str]:
     if sym not in ELIGIBLE_SYMBOLS:
         return False, f"{sym} not in 149-token competition allowlist"
     return True, "eligible"
+
+
+def get_eligible_symbols() -> list[str]:
+    """Return sorted list of all eligible competition symbols."""
+    return sorted(ELIGIBLE_SYMBOLS)

@@ -164,23 +164,48 @@ class CoherenceEngine:
 
     # ── W — World Model ───────────────────────────────────────────────────────
     @staticmethod
-    def _compute_w(environmental_signals: dict) -> float:
+    def _compute_w(environmental_signals: dict, raw_context: dict | None = None) -> float:
         """
         World model plane: how good is the agent's model of current environment?
         Measures data freshness, signal coverage, and consistency.
+
+        Accepts either structured environmental_signals (with timestamps) OR
+        falls back to raw context keys (fear_greed, price_change_* etc.) so the
+        plane is meaningful even when the caller passes plain market dicts.
         """
-        if not environmental_signals:
+        # ── Structured path (timestamped dicts) ───────────────────────────────
+        if environmental_signals:
+            ages = [time.time() - v.get("timestamp", time.time())
+                    for v in environmental_signals.values()
+                    if isinstance(v, dict) and "timestamp" in v]
+            freshness = max(0.0, 1.0 - (sum(ages) / max(len(ages), 1)) / 300.0) if ages else 0.60
+            coverage = min(1.0, len(environmental_signals) / 6.0)
+            w = 0.55 * freshness + 0.45 * coverage
+            return round(min(1.0, max(0.0, w)), 4)
+
+        # ── Raw-context fallback ───────────────────────────────────────────────
+        ctx = raw_context or {}
+        if not ctx:
             return 0.45
 
-        # Data freshness (age of signals)
-        ages = [time.time() - v.get("timestamp", time.time()) for v in environmental_signals.values()
-                if isinstance(v, dict) and "timestamp" in v]
-        freshness = max(0.0, 1.0 - (sum(ages) / max(len(ages), 1)) / 300.0) if ages else 0.60
+        # Market sentiment signal
+        fg = ctx.get("fear_greed", None)
+        if fg is not None:
+            # Optimal zone: 45-65 (neither extreme greed nor extreme fear)
+            # Scale: 0.50 at extremes (0 or 100), 1.0 at 55
+            fg_score = 1.0 - abs(fg - 55.0) / 55.0
+        else:
+            fg_score = 0.45
 
-        # Coverage (how many signal types present)
-        coverage = min(1.0, len(environmental_signals) / 6.0)  # 6 types = full coverage
+        # Price momentum coverage
+        price_fields = sum(1 for k in ("price_change_1h", "price_change_24h", "price_change_7d")
+                           if k in ctx and ctx[k] is not None)
+        momentum_coverage = min(1.0, price_fields / 3.0)
 
-        w = 0.55 * freshness + 0.45 * coverage
+        # Volume present?
+        vol_score = 0.80 if ctx.get("daily_volume_usd", 0) > 0 else 0.50
+
+        w = 0.40 * fg_score + 0.35 * momentum_coverage + 0.25 * vol_score
         return round(min(1.0, max(0.0, w)), 4)
 
     # ── A — Adaptation ───────────────────────────────────────────────────────
@@ -193,16 +218,18 @@ class CoherenceEngine:
         from core.adaptation_plane import get_adaptation_plane
         plane = get_adaptation_plane()
 
-        regime   = context.get("regime", "SIDEWAYS")
-        strategy = context.get("selected_strategy", "MomentumBreakout")
-        order_sz = context.get("order_size_usd", 10.0)
-        vol_usd  = context.get("daily_volume_usd", 50_000_000.0)
+        regime        = context.get("regime", "SIDEWAYS")
+        strategy      = context.get("selected_strategy", "MomentumBreakout")
+        order_sz      = context.get("order_size_usd", 10.0)
+        vol_usd       = context.get("daily_volume_usd", 50_000_000.0)
+        override_hour = context.get("override_hour", None)   # for backtesting / tests
 
         result = plane.compute(
             regime=regime,
             selected_strategy=strategy,
             order_size_usd=order_sz,
             daily_volume_usd=vol_usd,
+            override_hour=override_hour,
         )
         return result.A, result.to_dict()
 
@@ -222,7 +249,7 @@ class CoherenceEngine:
         i = self._compute_i(reasoning_chains)
         c = self._compute_c(reasoning_chains)
         s = self._compute_s(query)
-        w = self._compute_w(env_signals)
+        w = self._compute_w(env_signals, raw_context=context)
         a, a_detail = self._compute_a(context)
 
         psi = W_P*p + W_I*i + W_C*c + W_S*s + W_W*w + W_A*a

@@ -84,7 +84,10 @@ class DynamicThreshold:
     Higher = stricter = agent stays silent more often.
     """
 
-    BASE = 0.60   # Starting point — lower than the old fixed 0.65
+    BASE = 0.57   # Starting point — calibrated for peak-hour trading windows
+    # At fear_greed=70 (mild greed) this gives Δ≈0.60 — agent trades when Ψ≥0.61 at peak.
+    # Off-peak hours (UTC 0-7): A≈0.08-0.25 → Ψ≈0.56 → SILENCE (correct — low liquidity).
+    # Peak hours (UTC 8-20): A≈0.45-0.55 → Ψ≈0.62 → OPEN (correct — active markets).
 
     def compute(self, ctx: ThresholdContext) -> ThresholdResult:
         components: dict[str, float] = {"base": self.BASE}

@@ -31,7 +31,12 @@ import time
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
-import httpx
+try:
+    import httpx as _httpx
+    _HTTPX_AVAILABLE = True
+except ImportError:
+    _httpx = None  # type: ignore[assignment]
+    _HTTPX_AVAILABLE = False
 
 CMC_API_KEY = os.getenv("CMC_API_KEY", "")
 CMC_BASE = "https://pro-api.coinmarketcap.com"
@@ -106,11 +111,14 @@ class StrategySpec:
 
 class CMCFetcher:
     def __init__(self):
-        self._client = httpx.AsyncClient(
-            base_url=_BASE,
-            headers={"X-CMC_PRO_API_KEY": CMC_API_KEY, "Accept": "application/json"},
-            timeout=15,
-        )
+        if _HTTPX_AVAILABLE:
+            self._client = _httpx.AsyncClient(
+                base_url=_BASE,
+                headers={"X-CMC_PRO_API_KEY": CMC_API_KEY, "Accept": "application/json"},
+                timeout=15,
+            )
+        else:
+            self._client = None  # type: ignore[assignment]
 
     async def close(self):
         await self._client.aclose()
@@ -136,12 +144,13 @@ class CMCFetcher:
             return d.get("data", {})
         # fallback: try free API
         try:
-            fg = await httpx.AsyncClient(timeout=10).get(
-                "https://api.alternative.me/fng/?limit=1"
-            )
-            items = fg.json().get("data", [{}])
-            if items:
-                return {"value": int(items[0].get("value", 50)), "value_classification": items[0].get("value_classification", "Neutral")}
+            if _HTTPX_AVAILABLE:
+                fg = await _httpx.AsyncClient(timeout=10).get(
+                    "https://api.alternative.me/fng/?limit=1"
+                )
+                items = fg.json().get("data", [{}])
+                if items:
+                    return {"value": int(items[0].get("value", 50)), "value_classification": items[0].get("value_classification", "Neutral")}
         except Exception:
             pass
         return {"value": 50, "value_classification": "Neutral"}
@@ -153,12 +162,14 @@ class CMCFetcher:
             return r.json().get("data", [])
         # fallback: alternative.me
         try:
-            fg = await httpx.AsyncClient(timeout=10).get(
-                f"https://api.alternative.me/fng/?limit={limit}"
-            )
-            return fg.json().get("data", [])
+            if _HTTPX_AVAILABLE:
+                fg = await _httpx.AsyncClient(timeout=10).get(
+                    f"https://api.alternative.me/fng/?limit={limit}"
+                )
+                return fg.json().get("data", [])
         except Exception:
-            return []
+            pass
+        return []
 
     async def snapshot(self, symbol: str) -> CMCSnapshot:
         quote_task = asyncio.create_task(self.get_quote(symbol))

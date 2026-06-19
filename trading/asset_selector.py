@@ -23,7 +23,12 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
+try:
+    import httpx as _httpx
+    _HTTPX_AVAILABLE = True
+except ImportError:
+    _httpx = None  # type: ignore[assignment]
+    _HTTPX_AVAILABLE = False
 
 from bnb.allowlist import PRIORITY_SYMBOLS, ELIGIBLE_SYMBOLS, validate_trade_symbol
 
@@ -94,7 +99,9 @@ class DynamicAssetSelector:
             return {s: self._synthetic_quote(s) for s in symbols}
 
         sym_str = ",".join(symbols[:50])  # CMC allows 50 per call (free tier)
-        async with httpx.AsyncClient(
+        if not _HTTPX_AVAILABLE:
+            return {s: self._synthetic_quote(s) for s in symbols}
+        async with _httpx.AsyncClient(
             base_url=CMC_BASE,
             headers={"X-CMC_PRO_API_KEY": CMC_API_KEY},
             timeout=15,
