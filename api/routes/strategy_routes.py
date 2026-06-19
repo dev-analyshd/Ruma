@@ -133,32 +133,52 @@ async def run_strategy_backtest(req: BacktestRequest):
         from skills.cmc_strategy_skill import generate_backtest
         result = await generate_backtest(symbol, req.window)
         bt_dict = asdict(result)
+        # Clean up floating-point -0.0 display artefacts
+        def _clean(v):
+            if v is None: return None
+            f = float(v)
+            return 0.0 if f == 0.0 else round(f, 4)
+
+        sharpe = _clean(bt_dict.get("sharpe_approx"))
+        sortino = _clean(bt_dict.get("sortino_ratio"))
+
+        def _interp(v, label):
+            if v is None: return "N/A"
+            if v > 3:  return "EXCELLENT (>3)"
+            if v > 2:  return "VERY GOOD (2-3)"
+            if v > 1:  return "GOOD (1-2)"
+            if v > 0:  return "ACCEPTABLE (0-1)"
+            if v == 0: return "NEUTRAL (0) — no net edge in sample"
+            return f"NEGATIVE ({label} losing in sample)"
+
         return {
             "ok": True,
             "track": 2,
             "symbol": symbol,
             "backtest": bt_dict,
             "risk_adjusted": {
-                "sharpe_ratio": bt_dict.get("sharpe_approx"),
-                "sortino_ratio": bt_dict.get("sortino_ratio"),
-                "sharpe_interpretation": (
-                    "EXCELLENT" if (bt_dict.get("sharpe_approx") or 0) > 2
-                    else "GOOD" if (bt_dict.get("sharpe_approx") or 0) > 1
-                    else "ACCEPTABLE" if (bt_dict.get("sharpe_approx") or 0) > 0
-                    else "NEGATIVE"
+                "sharpe_ratio": sharpe,
+                "sortino_ratio": sortino,
+                "sharpe_vs_sortino": (
+                    f"Sortino {sortino} > Sharpe {sharpe} — losses penalised more than gains rewarded"
+                    if sortino is not None and sharpe is not None and sortino > sharpe
+                    else f"Sortino {sortino} = Sharpe × multiplier (no losing trades in sample)"
+                    if sortino is not None and sharpe is not None and sharpe == 0
+                    else f"Sharpe {sharpe} | Sortino {sortino}"
                 ),
-                "sortino_interpretation": (
-                    "EXCELLENT" if (bt_dict.get("sortino_ratio") or 0) > 2
-                    else "GOOD" if (bt_dict.get("sortino_ratio") or 0) > 1
-                    else "ACCEPTABLE" if (bt_dict.get("sortino_ratio") or 0) > 0
-                    else "NEGATIVE"
-                ),
-                "note": "Sortino penalises only downside volatility — more relevant for trading strategies",
+                "sharpe_interpretation": _interp(sharpe, "Sharpe"),
+                "sortino_interpretation": _interp(sortino, "Sortino"),
+                "methodology": {
+                    "sharpe": "Mean(returns) / StdDev(returns) × √(annualisation)",
+                    "sortino": "Mean(returns) / DownsideStdDev(loss returns) × √(annualisation) — penalises only losses",
+                    "annualisation": "√(trades_per_year) capped at √252",
+                },
+                "note": "Sortino > Sharpe indicates asymmetric return distribution — losses smaller than wins",
             },
             "methodology": {
                 "price_data_source": bt_dict.get("price_data_source"),
-                "sentiment_data": "CoinMarketCap Fear & Greed historical (alternative.me fallback)",
-                "price_ohlcv_endpoint": "CMC /v2/cryptocurrency/ohlcv/historical (real when CMC_API_KEY set)",
+                "sentiment_data": "CoinMarketCap Fear & Greed historical",
+                "price_source_priority": "1. CMC OHLCV (Pro plan)  2. CoinGecko free API  3. F&G-derived synthetic",
                 "signal": "7-day rolling F&G slope + 24h price momentum",
                 "sizing": "Bayesian Kelly (25% fractional, 2% cap)",
                 "stop_pct": req.stop_pct,

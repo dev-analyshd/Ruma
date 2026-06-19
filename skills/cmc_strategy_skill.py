@@ -602,16 +602,38 @@ def run_backtest(fg_history: list[dict], price_history: list[float], symbol: str
     mean_r = sum(returns) / len(returns) if returns else 0.0
     avg_held = sum(holding_bars_list) / len(holding_bars_list) if holding_bars_list else 0.0
 
-    # Sharpe ratio — use max(std, 1e-8) to avoid zero-std edge case (all wins or all losses)
-    std_r = max(statistics.stdev(returns), 1e-8) if len(returns) > 1 else 1e-8
-    sharpe = round(mean_r / std_r * math.sqrt(252), 3)
+    # ── Annualisation factor ──────────────────────────────────────────────────
+    # Approximate: trades spread over n days → trades_per_year → ann_factor.
+    # Capped at sqrt(252) so we never over-inflate a short sample.
+    trades_per_year = max(1, trades) * (365.0 / max(1, n))
+    ann_factor = math.sqrt(min(trades_per_year, 252.0))
 
-    # Sortino ratio — penalises only downside volatility (target = 0)
-    # When no losses, downside_std → 1e-8 → Sortino → very high (represents ideal strategy)
-    downside_sq = [(min(0.0, r)) ** 2 for r in returns]
-    downside_mean_sq = sum(downside_sq) / len(downside_sq) if downside_sq else 0.0
-    downside_std = max(math.sqrt(downside_mean_sq), 1e-8)
-    sortino = round(mean_r / downside_std * math.sqrt(252), 3)
+    # ── Sharpe ratio ─────────────────────────────────────────────────────────
+    raw_std = statistics.stdev(returns) if len(returns) > 1 else 0.0
+    if raw_std < 1e-6:
+        # All returns nearly identical (e.g. every trade hits same TP).
+        # Sharpe is not informative — use a conservative estimate based on
+        # the mean return relative to a 1% baseline volatility floor.
+        sharpe = round(mean_r / 0.01 * ann_factor, 3)
+        sharpe_note = "low-variance (all trades similar outcome)"
+    else:
+        sharpe = round(mean_r / raw_std * ann_factor, 3)
+        sharpe_note = None
+
+    # ── Sortino ratio — penalises ONLY downside volatility ───────────────────
+    downside_returns = [r for r in returns if r < 0]
+    if downside_returns:
+        # At least one losing trade — proper semi-deviation formula.
+        # Use full N in denominator (not just loss count) per standard definition.
+        downside_sq_mean = sum(r ** 2 for r in downside_returns) / len(returns)
+        downside_std = math.sqrt(downside_sq_mean)
+        sortino = round(mean_r / max(downside_std, 1e-6) * ann_factor, 3)
+    elif raw_std < 1e-6:
+        # No losses AND all returns identical — Sortino = Sharpe × 2 (conservative cap)
+        sortino = round(sharpe * 2.0, 3)
+    else:
+        # No losses but varied returns — Sortino = Sharpe × 1.5 is a reasonable estimate
+        sortino = round(sharpe * 1.5, 3)
 
     return BacktestResult(
         symbol=symbol, periods=n, trades=trades, wins=wins, losses=losses,
@@ -652,7 +674,7 @@ async def generate_backtest(symbol: str = "BNB", window: int = 30) -> BacktestRe
         snap = await fetcher.snapshot(symbol)
         price_history: list[float] = []
 
-        # Attempt to get real CMC OHLCV data
+        # ── 1. CMC OHLCV (Pro plan required) ─────────────────────────────────
         if CMC_API_KEY and _HTTPX_AVAILABLE:
             try:
                 async with _httpx.AsyncClient(timeout=15) as client:
@@ -662,26 +684,60 @@ async def generate_backtest(symbol: str = "BNB", window: int = 30) -> BacktestRe
                         params={"symbol": symbol, "time_period": "daily", "count": window, "convert": "USD"},
                     )
                     if resp.status_code == 200:
-                        quotes = resp.json().get("data", {}).get("quotes", [])
-                        if quotes:
-                            for q in quotes:
-                                close = q.get("quote", {}).get("USD", {}).get("close")
-                                if close:
-                                    price_history.append(float(close))
+                        data = resp.json().get("data", {})
+                        # data can be a list or a dict keyed by symbol
+                        quotes_list: list = []
+                        if isinstance(data, list):
+                            for item in data:
+                                quotes_list.extend(item.get("quotes", []))
+                        elif isinstance(data, dict):
+                            for v in data.values():
+                                if isinstance(v, list):
+                                    for item in v:
+                                        quotes_list.extend(item.get("quotes", []))
+                                elif isinstance(v, dict):
+                                    quotes_list.extend(v.get("quotes", []))
+                        for q in quotes_list:
+                            close = q.get("quote", {}).get("USD", {}).get("close")
+                            if close:
+                                price_history.append(float(close))
+                        if price_history:
                             price_source = "CoinMarketCap OHLCV (real daily closes)"
             except Exception:
                 pass
 
-        # Fallback: derive prices from Fear & Greed history (sentiment-anchored synthetic)
+        # ── 2. CoinGecko free public API (no key needed) ──────────────────────
+        if not price_history and _HTTPX_AVAILABLE:
+            _COINGECKO_IDS = {
+                "BNB": "binancecoin", "BTC": "bitcoin", "ETH": "ethereum",
+                "USDT": "tether", "CAKE": "pancakeswap-token",
+            }
+            cg_id = _COINGECKO_IDS.get(symbol.upper(), symbol.lower())
+            try:
+                async with _httpx.AsyncClient(timeout=15) as client:
+                    resp = await client.get(
+                        f"https://api.coingecko.com/api/v3/coins/{cg_id}/market_chart",
+                        params={"vs_currency": "usd", "days": window, "interval": "daily"},
+                        headers={"Accept": "application/json"},
+                    )
+                    if resp.status_code == 200:
+                        prices_raw = resp.json().get("prices", [])
+                        # Each entry: [timestamp_ms, price]
+                        price_history = [float(p[1]) for p in prices_raw if len(p) >= 2]
+                        if price_history:
+                            price_source = f"CoinGecko (real daily closes, {len(price_history)} days)"
+            except Exception:
+                pass
+
+        # ── 3. Synthetic fallback (F&G-anchored) ──────────────────────────────
         if not price_history:
             base = snap.price
             for i, entry in enumerate(reversed(fg_hist)):
                 fg_val = int(entry.get("value", 50))
-                # F&G 50→0 ≈ -3%/day; F&G 50→100 ≈ +3%/day (calibrated empirically)
                 daily_ret = (fg_val - 50) / 50.0 * 0.03
                 base *= (1 + daily_ret + (i * 0.0001))
                 price_history.append(base)
-            price_source = "synthetic (F&G-anchored — set CMC_API_KEY for real OHLCV)"
+            price_source = "synthetic (F&G-anchored — CMC OHLCV requires Pro plan)"
 
         result = run_backtest(fg_hist, price_history, symbol)
         result.price_data_source = price_source

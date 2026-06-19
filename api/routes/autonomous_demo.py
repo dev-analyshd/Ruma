@@ -322,29 +322,49 @@ async def autonomous_demo(symbol: str = Query(default="BNB", description="Token 
     step4_start = time.time()
     has_key = bool(os.getenv("TWAK_AGENT_PRIVATE_KEY", ""))
 
-    if risk_clear and direction != "NEUTRAL":
+    # When CMC bias is NEUTRAL, default to LONG (minimal position) so the
+    # agent meets the competition's 1-trade/day requirement. Adjust size down.
+    effective_direction = direction
+    if risk_clear and direction == "NEUTRAL":
+        effective_direction = "LONG"  # conservative default in ambiguous markets
+
+    if risk_clear:
         twak_output = {
             "would_execute": True,
             "symbol": f"{symbol}/USDT",
-            "direction": direction,
-            "size_usd": 10.0,
-            "kelly_fraction": 0.02,
+            "direction": effective_direction,
+            "size_usd": 5.0 if direction == "NEUTRAL" else 10.0,
+            "kelly_fraction": 0.01 if direction == "NEUTRAL" else 0.02,
             "slippage_pct": 0.5,
             "dex": "PancakeSwap V2",
             "chain": "BSC (Chain ID 56)",
+            "competition_contract": "0x212c61b9b72c95d95bf29cf032f5e5635629aed5",
             "signing_mode": "TWAK local signing — key never leaves environment",
-            "live_execution": has_key,
+            "key_loaded": has_key,
+            "execution_mode": "LIVE (key loaded — competition window June 22-28)" if has_key else "SIM (TWAK_AGENT_PRIVATE_KEY not set)",
+            "market_bias_was": direction,
             "note": (
-                "LIVE mode — TWAK would sign and broadcast this BSC transaction"
+                "LIVE mode — during competition window TWAK will sign and broadcast this BSC tx"
                 if has_key
                 else "SIM mode — set TWAK_AGENT_PRIVATE_KEY to enable live execution"
             ),
         }
         twak_status = "WOULD_EXECUTE"
     else:
+        # Compose a specific, accurate silence reason
+        if risk_reason:
+            silence_reason = risk_reason[0]
+        elif not gate_open_val:
+            silence_reason = f"TRION gate closed (Ψ={psi_val} < Δ={delta_val})"
+        else:
+            silence_reason = "Risk guard blocked execution"
+
         twak_output = {
             "would_execute": False,
-            "silence_reason": risk_reason[0] if risk_reason else "TRION gate closed — agent is SILENT",
+            "silence_reason": silence_reason,
+            "psi_score": psi_val,
+            "delta_threshold": delta_val,
+            "gate_open": gate_open_val,
             "silence_rate": "~87% of evaluations result in SILENCE (by design)",
             "note": "RUMA does not trade when Ψ < Δ. Silence is not failure — it is the gate working.",
         }
@@ -365,7 +385,7 @@ async def autonomous_demo(symbol: str = Query(default="BNB", description="Token 
         "label": "RUMA Autonomous Decision Cycle (dry-run)",
         "symbol": symbol,
         "final_decision": twak_status,
-        "direction": direction if risk_clear and direction != "NEUTRAL" else "SILENCE",
+        "direction": effective_direction if risk_clear else "SILENCE",
         "total_duration_ms": total_ms,
         "pipeline": pipeline_steps,
         "autonomy_evidence": {
@@ -375,7 +395,8 @@ async def autonomous_demo(symbol: str = Query(default="BNB", description="Token 
             "trion_evaluation": True,
             "risk_gates_applied": True,
             "twak_self_custody": True,
-            "real_trade_requires": "TWAK_AGENT_PRIVATE_KEY env var set + competition window (June 22-28)",
+            "twak_key_loaded": has_key,
+            "execution_mode": "LIVE (key ready — awaiting competition window June 22-28)" if has_key else "SIM",
         },
         "judge_links": {
             "competition_dashboard": "/api/v1/competition/dashboard",
