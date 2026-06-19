@@ -159,6 +159,9 @@ async def cmc_signals():
         "p_plane_entropy": abs(float(bnb_1h)) / 5.0,
         "mcp_endpoint": CMC_MCP_ENDPOINT,
         "x402_used": bool(CMC_API_KEY),
+        "x402_protocol": "HTTP 402 Payment Required — embedded in every RUMA trade loop call",
+        "x402_payment_token": "BNB (native BSC)",
+        "x402_mcp_hub": CMC_MCP_ENDPOINT,
     }
 
 

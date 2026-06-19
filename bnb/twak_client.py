@@ -163,11 +163,24 @@ class TWAKClient:
         return Web3(Web3.HTTPProvider(rpc, request_kwargs={"timeout": 20}))
 
     def _resolve_token_addr(self, symbol: str) -> Optional[str]:
-        """Resolve token symbol to BEP-20 address. Returns None for BNB (native)."""
+        """Resolve token symbol to BEP-20 address. Returns None for BNB (native).
+        Uses the full 149-token allowlist addresses for mainnet; testnet has a subset.
+        """
         sym = symbol.upper()
         if sym in ("BNB", "WBNB"):
             return None  # native
-        return self._tokens.get(sym)
+        # Check local token dict first (legacy / testnet subset)
+        local = self._tokens.get(sym)
+        if local:
+            return local
+        # For mainnet, use full allowlist address map
+        if self.network == "mainnet":
+            try:
+                from bnb.allowlist import TOKEN_MAINNET_ADDRESSES
+                return TOKEN_MAINNET_ADDRESSES.get(sym)
+            except ImportError:
+                pass
+        return None
 
     async def get_status(self) -> Dict[str, Any]:
         from bnb.chain_client import BSCClient
@@ -191,6 +204,28 @@ class TWAKClient:
             "x402_native": True,
             "twak_portal": "https://portal.trustwallet.com",
         }
+
+    async def _get_bnb_price_usd(self) -> float:
+        """Fetch live BNB/USD price from CMC API; falls back to 620 if unavailable."""
+        try:
+            import httpx
+            cmc_key = os.getenv("CMC_API_KEY", "")
+            if cmc_key:
+                headers = {"X-CMC_PRO_API_KEY": cmc_key, "Accept": "application/json"}
+                async with httpx.AsyncClient(timeout=8) as client:
+                    resp = await client.get(
+                        "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest",
+                        headers=headers,
+                        params={"symbol": "BNB"},
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json().get("data", {}).get("BNB", {})
+                        price = data.get("quote", {}).get("USD", {}).get("price")
+                        if price and price > 0:
+                            return float(price)
+        except Exception:
+            pass
+        return 620.0  # safe fallback
 
     async def get_quote(self, symbol: str, direction: str, size_usd: float) -> Dict[str, Any]:
         """
@@ -363,7 +398,9 @@ class TWAKClient:
                 token_addr = Web3.to_checksum_address(token_addr)
                 path = [Web3.to_checksum_address(self._wbnb), token_addr]
 
-                bnb_in_wei = w3.to_wei(size / 620, "ether")
+                # Use live CMC price for BNB conversion; fall back to 620
+                bnb_price = await self._get_bnb_price_usd()
+                bnb_in_wei = w3.to_wei(size / bnb_price, "ether")
 
                 # Get quote for amountOutMin
                 try:

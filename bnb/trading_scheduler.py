@@ -93,27 +93,70 @@ def get_scheduler_state() -> SchedulerState:
 
 # ── CMC signal poll ────────────────────────────────────────────────────────────
 async def _poll_cmc_signals() -> dict:
-    """Pull live CMC Fear & Greed + price data for signal evaluation."""
-    try:
-        cmc_key = os.getenv("CMC_API_KEY", "")
-        fg_resp = await httpx.AsyncClient(timeout=10).get(
-            "https://api.alternative.me/fng/?limit=1"
-        )
-        fg_items = fg_resp.json().get("data", [{}])
-        fg_val = int(fg_items[0].get("value", 50)) if fg_items else 50
-        fg_label = fg_items[0].get("value_classification", "Neutral") if fg_items else "Neutral"
+    """Pull live CMC Fear & Greed + price data for signal evaluation.
+    Uses CMC AI Agent Hub (real API) when CMC_API_KEY is set.
+    Falls back to alternative.me (free, no key) otherwise.
+    """
+    cmc_key = os.getenv("CMC_API_KEY", "")
+    fg_val, fg_label, bnb_1h = 50, "Neutral", 0.0
 
-        # Bias from F&G
-        if fg_val >= 65:
-            bias = "BULLISH"
-        elif fg_val <= 35:
-            bias = "BEARISH"
-        else:
-            bias = "NEUTRAL"
+    # ── Primary: CMC AI Agent Hub ─────────────────────────────────────────────
+    if cmc_key:
+        try:
+            headers = {"X-CMC_PRO_API_KEY": cmc_key, "Accept": "application/json"}
+            async with httpx.AsyncClient(timeout=10) as client:
+                # Fear & Greed from CMC global metrics
+                fg_resp = await client.get(
+                    "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest",
+                    headers=headers,
+                )
+                if fg_resp.status_code == 200:
+                    fg_data = fg_resp.json().get("data", {})
+                    fg_idx = fg_data.get("fear_greed_index", {})
+                    fg_val = int(fg_idx.get("value", 50))
+                    fg_label = fg_idx.get("value_classification", "Neutral")
 
-        return {"fear_greed": fg_val, "fear_greed_label": fg_label, "bias": bias, "ok": True}
-    except Exception as e:
-        return {"fear_greed": 50, "bias": "NEUTRAL", "ok": False, "error": str(e)}
+                # BNB 1h price change
+                price_resp = await client.get(
+                    "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest",
+                    headers=headers,
+                    params={"symbol": "BNB"},
+                )
+                if price_resp.status_code == 200:
+                    bnb_data = price_resp.json().get("data", {}).get("BNB", {})
+                    bnb_1h = bnb_data.get("quote", {}).get("USD", {}).get("percent_change_1h", 0.0) or 0.0
+
+        except Exception as e:
+            print(f"[SCHEDULER] CMC API error: {e} — falling back to alternative.me")
+            cmc_key = ""  # trigger fallback
+
+    # ── Fallback: alternative.me (no key needed) ──────────────────────────────
+    if not cmc_key:
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                fg_resp = await client.get("https://api.alternative.me/fng/?limit=1")
+                fg_items = fg_resp.json().get("data", [{}])
+                fg_val = int(fg_items[0].get("value", 50)) if fg_items else 50
+                fg_label = fg_items[0].get("value_classification", "Neutral") if fg_items else "Neutral"
+        except Exception as e:
+            print(f"[SCHEDULER] alternative.me error: {e}")
+
+    # Bias: bullish when F&G > 55 AND price rising, bearish when F&G < 40 AND price falling
+    if fg_val >= 65 or (fg_val >= 55 and bnb_1h > 0.2):
+        bias = "BULLISH"
+    elif fg_val <= 35 or (fg_val <= 45 and bnb_1h < -0.2):
+        bias = "BEARISH"
+    else:
+        bias = "NEUTRAL"
+
+    return {
+        "fear_greed": fg_val,
+        "fear_greed_label": fg_label,
+        "bias": bias,
+        "bnb_1h_pct": round(bnb_1h, 4),
+        "source": "CoinMarketCap AI Agent Hub" if os.getenv("CMC_API_KEY") else "alternative.me (fallback)",
+        "ok": True,
+    }
 
 
 # ── Ψ-gate check (lightweight, no LLM required) ───────────────────────────────
@@ -155,21 +198,21 @@ async def _execute_scheduled_trade(signals: dict, symbol: str = "BNB") -> dict:
     try:
         from bnb.twak_client import TWAKClient
         bias = signals.get("bias", "BULLISH")
-        side = "buy" if bias == "BULLISH" else "sell"
+        direction = "LONG" if bias in ("BULLISH", "NEUTRAL") else "SHORT"
         client = TWAKClient()
-        result = await client.swap(
-            base_token=symbol,
-            quote_token="USDT",
-            side=side,
-            amount_usd=5.0,    # minimal scheduled trade — preserves capital
+        result = await client.execute_swap(
+            symbol=f"{symbol}/USDT",
+            direction=direction,
+            size=5.0,    # minimal scheduled trade — preserves capital
             slippage_pct=0.5,
         )
-        if result.get("success"):
+        executed = result.get("executed", False)
+        if executed:
             _state.today_trades += 1
             _state.total_trades += 1
             _state.last_trade_ts = time.time()
             _state._add_log(
-                f"Scheduled trade executed: {side.upper()} {symbol} "
+                f"Scheduled trade executed: {direction} {symbol} "
                 f"tx={result.get('tx_hash','')[:12]}..."
             )
             # Fire Telegram alert
@@ -177,18 +220,20 @@ async def _execute_scheduled_trade(signals: dict, symbol: str = "BNB") -> dict:
                 from notifications.telegram import alert_trade_executed
                 await alert_trade_executed(
                     symbol=f"{symbol}/USDT",
-                    direction=side.upper(),
-                    psi_score=signals.get("psi_score", 0.0),
+                    direction=direction,
+                    size_usd=5.0,
+                    psi=signals.get("psi_score", 0.0),
                     delta=0.60,
-                    kelly_fraction=0.005,
-                    amount_usd=5.0,
                     tx_hash=result.get("tx_hash", ""),
-                    bscscan_url=result.get("bscscan_url", ""),
-                    lam=0.0,
+                    bscscan_url=result.get("bscscan", ""),
+                    simulated=result.get("simulated", True),
+                    cmc_bias=signals.get("bias"),
+                    kelly_fraction=0.005,
+                    network=os.getenv("BSC_NETWORK", "testnet"),
                 )
             except Exception:
                 pass
-        return result
+        return {"success": executed, **result}
     except Exception as e:
         _state.errors.append(str(e))
         _state._add_log(f"Scheduled trade ERROR: {e}")
