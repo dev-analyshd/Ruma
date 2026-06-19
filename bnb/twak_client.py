@@ -305,6 +305,21 @@ class TWAKClient:
         base_sym, quote_sym = _parse_symbol(symbol)
         slippage = min(slippage_pct / 100, MAX_SLIPPAGE)
 
+        # ── Competition allowlist check (enforced before signing) ──────────────
+        try:
+            from bnb.allowlist import validate_trade_symbol
+            allowed, reason = validate_trade_symbol(base_sym)
+            if not allowed:
+                return {
+                    "executed": False,
+                    "silenced": True,
+                    "reason": f"Allowlist: {reason}",
+                    "symbol": symbol,
+                    "competition_rule": "149-token allowlist",
+                }
+        except ImportError:
+            pass  # allowlist module optional
+
         if self.simulation_mode:
             import random
             tx_hash = "0x" + "".join(random.choices("0123456789abcdef", k=64))

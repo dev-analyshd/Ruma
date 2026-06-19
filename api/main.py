@@ -12,6 +12,7 @@ from api.routes import memory
 from api.routes import cmc_routes, twak_routes
 from api.routes import telegram_routes
 from api.routes import strategy_routes, bnb_sdk_routes
+from api.routes import competition_dashboard
 
 
 @asynccontextmanager
@@ -175,6 +176,9 @@ app.include_router(strategy_routes.router, prefix="/api/v1", tags=["Track 2: Str
 
 # ── BNB AI Agent SDK (special prize) ─────────────────────────────────────────
 app.include_router(bnb_sdk_routes.router, prefix="/api/v1", tags=["BNB AI Agent SDK"])
+
+# ── Competition Dashboard + Emergency Stop ─────────────────────────────────────
+app.include_router(competition_dashboard.router, prefix="/api/v1", tags=["Competition Dashboard"])
 
 
 @app.get("/favicon.ico", include_in_schema=False)

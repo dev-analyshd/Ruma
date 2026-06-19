@@ -176,12 +176,55 @@ RUMA auto-registers your agent wallet with the BSC competition contract:
 
 ---
 
+## Competition Dashboard (Judges)
+
+During June 22–28 trading week, judges can verify RUMA in real time:
+
+| Endpoint | What It Shows |
+|---|---|
+| `GET /api/v1/competition/dashboard` | Live PnL, drawdown %, trades today/week, Ψ history, all tx hashes |
+| `GET /api/v1/competition/proof` | Full on-chain proof package — agent address, registration tx, all BscScan links |
+| `GET /api/v1/competition/rank` | Registration status on competition contract |
+| `POST /api/v1/competition/emergency-stop` | Manual kill switch (disables all TWAK signing) |
+| `GET /api/v1/strategy/catalog` | Track 2: all 3 strategies explained |
+| `GET /api/v1/strategy/spec/BNB` | Track 2: live CMC strategy spec |
+| `GET /api/v1/docs` | Full Swagger UI — all endpoints documented |
+
+---
+
+## Beyond the Hackathon
+
+### Months 1–2: Live Trading Vault
+- Open to external capital via on-chain BSC smart contract vault
+- Investors deposit BNB; RUMA trades with 2% max risk per position
+- Performance fee: 20% of profits, claimable on-chain
+- Every trade verifiable via Ψ scores on BSC — no black box
+
+### Months 3–6: Cross-Chain Expansion
+- Deploy TWAK adapters for Ethereum, Base, Arbitrum
+- Single TRION instance manages multi-chain portfolios
+- Λ (moat) is chain-agnostic — reputation follows the agent across chains
+
+### Months 6–12: Agent Economy
+- Other AI agents purchase RUMA's reasoning via x402 (0.001 BNB/call)
+- Federation network: agents with Ψ ≥ threshold gain federated peer access
+- The agent becomes infrastructure — not just a trader, but a reasoning oracle
+
+### Long-term: Decentralised TRION
+- TRION Ψ evaluation runs in verifiable compute (FHE/TEE)
+- Any agent can prove cognitive alignment without revealing its reasoning
+- The silence protocol becomes a cross-ecosystem standard for trustworthy AI
+
+---
+
 ## Resources
 
 - [CoinMarketCap AI Agent Hub](https://coinmarketcap.com/api/agent)
 - [Trust Wallet Agent Kit](https://portal.trustwallet.com)
 - [BNB AI Agent SDK](https://github.com/bnb-chain/bnbagent-sdk)
 - [BNB Hack Telegram](https://t.me/+MhiOLT0YUnlmNWFk)
+- [DoraHacks Submission](https://dorahacks.io)
+- [Strategy Explanation](./STRATEGY.md)
 
 *RUMA v1.0.0 · BNB Hack: AI Trading Agent Edition · CoinMarketCap × Trust Wallet · June 2026*
-*$36,000 Prize Pool · Track 1: Autonomous Trading Agents ($24,000)*
+*$36,000 Prize Pool · Track 1 ($24,000) + Track 2 ($6,000) + Special Prizes ($6,000)*
