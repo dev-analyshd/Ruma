@@ -1,0 +1,59 @@
+services:
+  - type: web
+    name: ruma-agent
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: singapore        # closest to BSC validators
+    plan: starter            # upgrade to standard for 24/7 competition window
+    healthCheckPath: /api/v1/health
+    envVars:
+      # ── Required secrets (set in Render dashboard → Environment) ────────────
+      - key: TWAK_AGENT_PRIVATE_KEY
+        sync: false          # set manually — never commit private key
+
+      - key: CMC_API_KEY
+        sync: false          # set manually
+
+      # ── BSC network config ───────────────────────────────────────────────────
+      - key: BSC_NETWORK
+        value: mainnet
+
+      - key: BSC_RPC_URL
+        value: https://bsc-dataseed.binance.org
+
+      - key: BSC_TESTNET_RPC_URL
+        value: https://data-seed-prebsc-1-s1.binance.org:8545
+
+      # ── Competition contracts ─────────────────────────────────────────────────
+      - key: COMPETITION_CONTRACT
+        value: "0x212c61b9b72c95d95bf29cf032f5e5635629aed5"
+
+      - key: RUMA_HEARTBEAT_CONTRACT
+        sync: false          # set after running scripts/deploy_contracts.py
+
+      - key: RUMA_REGISTRY_CONTRACT
+        sync: false          # set after running scripts/deploy_contracts.py
+
+      # ── Agent identity ────────────────────────────────────────────────────────
+      - key: AGENT_WALLET
+        value: "0xdBbf66CAD621dA3Ec186D18b29a135d2A5d42d20"
+
+      # ── Runtime flags ─────────────────────────────────────────────────────────
+      - key: TRADING_ENABLED
+        value: "true"
+
+      - key: TWAK_AUTONOMOUS_MODE
+        value: "true"
+
+      - key: PYTHONDONTWRITEBYTECODE
+        value: "1"
+
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+      # ── Optional: Telegram alerts ─────────────────────────────────────────────
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+
+      - key: TELEGRAM_CHAT_ID
+        sync: false
