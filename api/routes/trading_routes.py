@@ -1,7 +1,7 @@
 """
 Dynamic Trading Engine API — RUMA
 ===================================
-Exposes all 5 dynamic modules as REST endpoints.
+Exposes all dynamic modules as REST endpoints.
 Judges can call these to see the full adaptive decision pipeline live.
 
 GET  /api/v1/trading/sizer          — compute dynamic position size
@@ -10,6 +10,10 @@ GET  /api/v1/trading/threshold      — current Δ(t) gate
 GET  /api/v1/trading/strategy       — selected strategy for current CMC regime
 GET  /api/v1/trading/opportunities  — top 5 asset opportunities (live CMC scan)
 GET  /api/v1/trading/pipeline       — full pipeline: opportunities → strategy → size → risk
+GET  /api/v1/trading/strategies     — all 10 ADAPT-Ω strategies ranked by expected_edge
+GET  /api/v1/trading/strategies/{name} — single strategy signal
+POST /api/v1/trading/strategies/outcome — record trade outcome for on-chain learning
+GET  /api/v1/trading/strategies/performance — per-strategy win rates
 """
 from __future__ import annotations
 import asyncio
@@ -370,4 +374,168 @@ async def full_pipeline(
         },
         "final_action": final_action,
         "symbol": symbol,
+    }
+
+
+# ── Strategy Registry endpoints (10 ADAPT-Ω strategies) ──────────────────────
+
+@router.get("/trading/strategies")
+async def all_strategies(
+    psi: float = Query(default=0.72, description="Current Ψ coherence score (0–1)"),
+    capital: float = Query(default=500.0, description="Vault capital USD"),
+    top_n: int = Query(default=10, ge=1, le=10, description="Number of strategies to return"),
+):
+    """
+    Evaluate all 10 ADAPT-Ω strategies and rank by expected_edge = opp × Ψ × A(t).
+    Returns every strategy scored so judges can see the full decision surface.
+    """
+    from trading.strategy_registry import get_registry
+    from core.adaptation_plane import get_adaptation_plane
+    cmc = await _get_cmc_context()
+    agent_ctx = _get_agent_state()
+    fg = cmc["fear_greed"]
+
+    snap = {
+        "fear_greed": fg, "lambda_val": agent_ctx.get("lambda_val", 0.01),
+        "price_change_1h": 0.0, "price_change_24h": 0.0, "price_change_7d": 0.0,
+        "daily_volume_usd": 1_000_000_000.0, "volume_24h": 1_000_000_000.0,
+        "funding_rate": 0.0, "sentiment_score": fg, "bot_ratio": 0.25,
+        "onchain_outflow_zscore": 0.0, "whale_count": 0,
+        "basis_spread": 0.003, "gas_cost_usd": 2.0,
+        "w_score": 0.60, "vix_proxy": (100 - fg) / 5.0,
+    }
+
+    plane = get_adaptation_plane()
+    a_val = plane.compute(
+        regime="BULL" if fg >= 60 else "BEAR" if fg <= 35 else "SIDEWAYS",
+        selected_strategy="momentum_surge",
+        order_size_usd=20.0, daily_volume_usd=1e9,
+    ).A
+
+    registry = get_registry()
+    signals = registry.evaluate_all(snap, psi, a_val, capital)
+
+    return {
+        "ok": True,
+        "timestamp": time.time(),
+        "psi": psi, "adaptation": round(a_val, 4),
+        "fear_greed": fg,
+        "edge_threshold": 0.22,
+        "strategies": [
+            {k: v for k, v in s.items() if k != "on_chain_fields"}
+            for s in signals[:top_n]
+        ],
+        "selected": next(
+            (s["strategy"] for s in signals if not s["silenced"]), "SILENCE"
+        ),
+    }
+
+
+@router.get("/trading/strategies/{strategy_name}")
+async def single_strategy(
+    strategy_name: str,
+    psi: float = Query(default=0.72),
+    capital: float = Query(default=500.0),
+):
+    """
+    Get the signal from one specific strategy by name.
+    Strategy names: momentum_surge | mean_reversion_fear | funding_rate_arb |
+    sentiment_divergence | liquidity_sweep | volatility_regime_switch |
+    onchain_flow | lambda_dca | cross_exchange_basis | black_swan_insurance
+    """
+    from trading.strategies.all_ten import STRATEGY_MAP
+    from core.adaptation_plane import get_adaptation_plane
+    from fastapi import HTTPException
+    cmc = await _get_cmc_context()
+    fg = cmc["fear_greed"]
+
+    strategy = STRATEGY_MAP.get(strategy_name)
+    if not strategy:
+        raise HTTPException(status_code=404, detail=f"Strategy '{strategy_name}' not found. "
+            f"Available: {list(STRATEGY_MAP.keys())}")
+
+    snap = {
+        "fear_greed": fg, "price_change_1h": 0.0, "price_change_24h": 0.0,
+        "price_change_7d": 0.0, "daily_volume_usd": 1e9, "volume_24h": 1e9,
+        "funding_rate": 0.0, "sentiment_score": fg, "bot_ratio": 0.25,
+        "onchain_outflow_zscore": 0.0, "whale_count": 0,
+        "basis_spread": 0.003, "gas_cost_usd": 2.0,
+        "w_score": 0.60, "vix_proxy": (100 - fg) / 5.0, "lambda_val": 0.01,
+    }
+
+    plane = get_adaptation_plane()
+    a_val = plane.compute(order_size_usd=20.0, daily_volume_usd=1e9).A
+    sig = strategy.evaluate(snap, psi, a_val, capital)
+
+    return {
+        "ok": True,
+        "strategy": strategy_name,
+        "psi_requirement": strategy.psi_requirement,
+        "opportunity_score": sig.opportunity_score,
+        "expected_edge": sig.expected_edge,
+        "direction": sig.direction,
+        "size_usd": sig.dynamic_size_pct * capital,
+        "silenced": sig.silence,
+        "rationale": sig.rationale,
+        "on_chain_fields": sig.on_chain_fields,
+        "fear_greed": fg,
+        "adaptation": round(a_val, 4),
+    }
+
+
+class OutcomePayload(BaseModel):
+    strategy_name: str
+    psi_at_entry: float
+    a_val_at_entry: float
+    predicted_return: float
+    actual_return: float
+    regime: str = "BULL"
+    won: bool
+
+
+@router.post("/trading/strategies/outcome")
+async def record_strategy_outcome(payload: OutcomePayload):
+    """
+    Record a trade outcome. Updates EFFECTIVENESS_MATRIX and AdaptationPlane κ(t).
+    This is the on-chain learning loop: RUMA gets smarter after every trade.
+    """
+    from trading.strategy_registry import get_registry
+    registry = get_registry()
+    registry.record_outcome(
+        strategy_name=payload.strategy_name,
+        psi_at_entry=payload.psi_at_entry,
+        a_val_at_entry=payload.a_val_at_entry,
+        predicted_return=payload.predicted_return,
+        actual_return=payload.actual_return,
+        regime=payload.regime,
+        won=payload.won,
+    )
+    perf = registry.strategy_performance_summary()
+    match = next((p for p in perf if p["strategy"] == payload.strategy_name), None)
+    return {
+        "ok": True,
+        "recorded": payload.strategy_name,
+        "regime": payload.regime,
+        "won": payload.won,
+        "error": round(abs(payload.predicted_return - payload.actual_return), 5),
+        "strategy_performance": match,
+    }
+
+
+@router.get("/trading/strategies/performance")
+async def strategies_performance():
+    """
+    Per-strategy win rates and P&L from recorded outcomes.
+    Shows on-chain learning progress — RUMA getting smarter over time.
+    """
+    from trading.strategy_registry import get_registry
+    registry = get_registry()
+    perf = registry.strategy_performance_summary()
+    return {
+        "ok": True,
+        "timestamp": time.time(),
+        "total_strategies": 10,
+        "strategies_with_history": len(perf),
+        "performance": perf,
+        "note": "Win rates update after each recorded outcome. Empty until trading begins (June 22).",
     }
