@@ -159,13 +159,49 @@ async def _poll_cmc_signals() -> dict:
     }
 
 
+# ── Vault sizing helper ────────────────────────────────────────────────────────
+async def _get_vault_usd() -> float:
+    """Fetch live BNB balance and convert to USD for dynamic position sizing."""
+    try:
+        from bnb.chain_client import BSCClient
+        import httpx
+        bsc = BSCClient()
+        bnb_bal = await bsc.get_bnb_balance()
+        if bnb_bal <= 0:
+            return 0.0
+        # Live BNB price from CMC
+        cmc_key = os.getenv("CMC_API_KEY", "")
+        bnb_price = 620.0
+        if cmc_key:
+            try:
+                async with httpx.AsyncClient(timeout=6) as client:
+                    r = await client.get(
+                        "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest",
+                        headers={"X-CMC_PRO_API_KEY": cmc_key},
+                        params={"symbol": "BNB"},
+                    )
+                    if r.status_code == 200:
+                        d = r.json().get("data", {}).get("BNB", {})
+                        p = d.get("quote", {}).get("USD", {}).get("price")
+                        if p and p > 0:
+                            bnb_price = float(p)
+            except Exception:
+                pass
+        return round(bnb_bal * bnb_price, 2)
+    except Exception:
+        return 0.0
+
+
 # ── Ψ-gate check (lightweight, no LLM required) ───────────────────────────────
-def _quick_psi_gate(signals: dict) -> tuple[bool, float, str]:
+def _quick_psi_gate(signals: dict, urgent: bool = False) -> tuple[bool, float, str]:
     """
     Lightweight Ψ-gate that doesn't require LLM reasoning.
     Uses only CMC signals for scheduled trades.
-    Full gate runs in /api/v1/skills/invoke/trade_evaluate.
     Returns: (gate_open, psi_score, reason)
+
+    urgent=True: last 4 hours of the day with no trade yet.
+    In urgent mode the threshold drops to 0.35 and NEUTRAL bias is allowed
+    through so the daily-minimum trade is guaranteed.
     """
     fg = signals.get("fear_greed", 50)
     bias = signals.get("bias", "NEUTRAL")
@@ -181,10 +217,17 @@ def _quick_psi_gate(signals: dict) -> tuple[bool, float, str]:
 
     # Simplified Ψ (no full TRION)
     psi = 0.4 * p_score + 0.3 * c_score + 0.2 * w_score + 0.1 * 0.6
-    delta = 0.60  # lower bar for scheduled daily-minimum trade
 
-    gate_open = psi >= delta and bias != "NEUTRAL"
-    reason = f"bias={bias} FG={fg} Ψ={psi:.3f} Δ={delta}"
+    if urgent:
+        # Emergency daily-minimum: much lower bar, NEUTRAL allowed
+        delta = 0.35
+        gate_open = psi >= delta
+        reason = f"URGENT bias={bias} FG={fg} Ψ={psi:.3f} Δ={delta} (daily-min override)"
+    else:
+        delta = 0.60
+        gate_open = psi >= delta and bias != "NEUTRAL"
+        reason = f"bias={bias} FG={fg} Ψ={psi:.3f} Δ={delta}"
+
     return gate_open, round(psi, 4), reason
 
 
@@ -200,10 +243,19 @@ async def _execute_scheduled_trade(signals: dict, symbol: str = "BNB") -> dict:
         bias = signals.get("bias", "BULLISH")
         direction = "LONG" if bias in ("BULLISH", "NEUTRAL") else "SHORT"
         client = TWAKClient()
+
+        # Dynamic position sizing: 2% of vault, min $5, max $100
+        vault_usd = await _get_vault_usd()
+        if vault_usd > 0:
+            size = round(max(5.0, min(vault_usd * 0.02, 100.0)), 2)
+        else:
+            size = 5.0
+        _state._add_log(f"Position size: ${size} (vault≈${vault_usd:.2f})")
+
         result = await client.execute_swap(
             symbol=f"{symbol}/USDT",
             direction=direction,
-            size=5.0,    # minimal scheduled trade — preserves capital
+            size=size,
             slippage_pct=0.5,
         )
         executed = result.get("executed", False)
@@ -286,14 +338,23 @@ async def competition_scheduler_loop():
             hours_left = _state.hours_left_today()
             urgent = hours_left < 4
 
-            # Run quick Ψ-gate
-            gate_open, psi, reason = _quick_psi_gate(signals)
+            # Run quick Ψ-gate — pass urgent so it lowers threshold when needed
+            gate_open, psi, reason = _quick_psi_gate(signals, urgent=urgent)
             signals["psi_score"] = psi
             _state._add_log(f"Gate: {'OPEN' if gate_open else 'CLOSED'} ({reason})")
 
             if gate_open:
                 # Try symbols in priority order until one succeeds
                 for sym in SYMBOLS_PRIORITY:
+                    result = await _execute_scheduled_trade(signals, sym)
+                    if result.get("success"):
+                        break
+                    await asyncio.sleep(5)
+            elif urgent and not _state.daily_quota_met():
+                # < 4 hours left, gate still closed — force BNB LONG as last resort
+                _state._add_log("URGENT: gate closed but forcing BNB LONG to meet daily minimum")
+                signals["bias"] = "BULLISH"
+                for sym in ["BNB", "CAKE"]:
                     result = await _execute_scheduled_trade(signals, sym)
                     if result.get("success"):
                         break
