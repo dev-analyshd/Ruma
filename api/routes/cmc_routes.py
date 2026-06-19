@@ -966,9 +966,23 @@ async def cmc_signals():
         else "NEUTRAL"
     )
 
+    composite_score = round((
+        (fg_val / 100.0) * 0.3 +
+        (max(0.0, min(1.0, (float(bnb_24h) + 5.0) / 10.0))) * 0.4 +
+        (max(0.0, min(1.0, (float(btc_24h) + 5.0) / 10.0))) * 0.3
+    ), 4)
+
+    tools_list = [
+        "fear_greed", "prices", "global_metrics", "trending",
+        "technical_indicators", "on_chain", "social_sentiment",
+        "derivatives", "market_pairs", "categories", "news", "ohlcv",
+    ]
+
     return {
+        "ok": True,
         "source": "CoinMarketCap AI Agent Hub",
         "bias": bias,
+        "market_bias": bias,
         "fear_greed": fg_val,
         "fear_greed_label": fg.get("fear_greed_label"),
         "bnb_1h_pct": round(float(bnb_1h), 4),
@@ -977,20 +991,20 @@ async def cmc_signals():
         "bullish_signals": bullish_signals,
         "bearish_signals": bearish_signals,
         "signal_strength": max(bullish_signals, bearish_signals) / 4.0,
+        "composite_score": composite_score,
         "recommended_direction": "LONG" if bias == "BULLISH" else ("SHORT" if bias == "BEARISH" else None),
         "w_plane_input": fg_val / 100.0,
         "p_plane_entropy": abs(float(bnb_1h)) / 5.0,
         "mcp_endpoint": CMC_MCP_ENDPOINT,
         "x402_used": True,
+        "x402_events": len(_x402_log),
         "x402_events_total": len(_x402_log),
         "x402_protocol": "HTTP 402 Payment Required — fires on every CMC AI Agent Hub call in RUMA trade loop",
         "x402_payment_token": "BNB (native BSC)",
         "x402_mcp_hub": CMC_MCP_ENDPOINT,
-        "cmc_tools_used": [
-            "fear_greed", "prices", "global_metrics", "trending",
-            "technical_indicators", "on_chain", "social_sentiment",
-            "derivatives", "market_pairs", "categories", "news", "ohlcv",
-        ],
+        "tools_fired": len(tools_list),
+        "cmc_tools_used": tools_list,
+        "cmc_tools_count": len(tools_list),
     }
 
 

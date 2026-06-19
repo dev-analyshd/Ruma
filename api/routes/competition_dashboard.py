@@ -213,6 +213,11 @@ class CompetitionState:
 
 
 _state = CompetitionState()
+# Initialize agent address from env on startup
+_state.agent_address = os.getenv(
+    "TWAK_AGENT_WALLET",
+    "0xdBbf66CAD621dA3Ec186D18b29a135d2A5d42d20"
+)
 
 
 def get_competition_state() -> CompetitionState:
