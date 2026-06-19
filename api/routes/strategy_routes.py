@@ -160,10 +160,12 @@ async def run_strategy_backtest(req: BacktestRequest):
                 "sharpe_ratio": sharpe,
                 "sortino_ratio": sortino,
                 "sharpe_vs_sortino": (
-                    f"Sortino {sortino} > Sharpe {sharpe} — losses penalised more than gains rewarded"
-                    if sortino is not None and sharpe is not None and sortino > sharpe
-                    else f"Sortino {sortino} = Sharpe × multiplier (no losing trades in sample)"
-                    if sortino is not None and sharpe is not None and sharpe == 0
+                    f"Both near zero — strategy near-flat in sample period (return ≈ 0)"
+                    if sharpe is not None and sortino is not None and sharpe == 0 and sortino == 0
+                    else f"Sortino {sortino} > Sharpe {sharpe} — losses penalised more than gains rewarded"
+                    if sortino is not None and sharpe is not None and sharpe != 0 and sortino > sharpe
+                    else f"Sortino {sortino} = Sharpe × 1.5-3× (no losing trades in sample)"
+                    if sortino is not None and sharpe is not None and sharpe != 0
                     else f"Sharpe {sharpe} | Sortino {sortino}"
                 ),
                 "sharpe_interpretation": _interp(sharpe, "Sharpe"),

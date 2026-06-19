@@ -113,7 +113,7 @@ async def _fetch_cmc_with_x402(symbol: str) -> dict:
     import time
     import hashlib
     cmc_key = os.getenv("CMC_API_KEY", "")
-    bsc_network = os.getenv("BSC_NETWORK", "testnet")
+    bsc_network = os.getenv("BSC_NETWORK", "mainnet")
     private_key = os.getenv("TWAK_AGENT_PRIVATE_KEY", "")
 
     payment_record = {
