@@ -2,9 +2,6 @@
 
 > *Truth or silence. Ruma reads, decides, and signs its own trades — self-custodial, end to end.*
 
-**BNB Hack: AI Trading Agent Edition ⚡️ CoinMarketCap × Trust Wallet**
-**Track 1 ($24K) · Track 2 ($6K) · Special Prizes · Deadline: June 21, 2026 13:00 UTC**
-
 RUMA is a **crypto-native autonomous trading agent** on BNB Chain that reads markets via the **CoinMarketCap AI Agent Hub**, decides using **TRION coherence mathematics + ADAPT-Ω strategy registry**, and executes self-custodial trades via the **Trust Wallet Agent Kit (TWAK)** — all without human intervention.
 
 | Layer | Component |
